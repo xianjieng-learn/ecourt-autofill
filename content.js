@@ -1,0 +1,460 @@
+/**
+ * eCourt AutoFill - Content Script
+ * Injected into ecourt.mahkamahagung.go.id pages.
+ * Receives party data from popup and fills the form.
+ */
+
+// Listen for messages from popup
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'fillForm') {
+    const result = fillEcourtForm(request.data);
+    sendResponse(result);
+  }
+  return true; // Keep channel open for async response
+});
+
+/**
+ * Main form filling function.
+ * Handles various eCourt form field types.
+ */
+function fillEcourtForm(data) {
+  let filledFields = 0;
+  const errors = [];
+
+  // ─── Field mapping: party data key → form field label pattern ───
+  const fieldMap = [
+    { key: 'nama',             labels: ['Nama', 'Nama Lengkap'], type: 'text' },
+    { key: 'nik',              labels: ['Nomor Identitas', 'NIK', 'No KTP'], type: 'text' },
+    { key: 'alamat',           labels: ['Alamat'], type: 'text' },
+    { key: 'tempat_lahir',     labels: ['Tempat Lahir'], type: 'text' },
+    { key: 'tanggal_lahir',    labels: ['Tanggal Lahir', 'Tgl Lahir'], type: 'text' },
+    { key: 'pekerjaan',        labels: ['Pekerjaan'], type: 'text' },
+    { key: 'kewarganegaraan',  labels: ['Warga Negara', 'WN'], type: 'text' },
+    { key: 'email',            labels: ['Email', 'e-mail'], type: 'text' },
+    { key: 'telepon',          labels: ['Telepon', 'Telp', 'HP', 'No HP', 'No Telp'], type: 'text' },
+    { key: 'agama',            labels: ['Agama'], type: 'dropdown' },
+    { key: 'jenis_kelamin',    labels: ['Jenis Kelamin', 'JK'], type: 'dropdown' },
+    { key: 'pendidikan',       labels: ['Pendidikan'], type: 'dropdown' },
+    { key: 'status_kawin',     labels: ['Status Kawin', 'Status Perkawinan'], type: 'dropdown' },
+  ];
+
+  // ─── Fill each field ───
+  for (const field of fieldMap) {
+    const value = data[field.key];
+    if (!value) continue;
+
+    try {
+      let success = false;
+      
+      if (field.type === 'dropdown') {
+        success = fillDropdown(field.labels, value);
+      } else {
+        success = fillTextInput(field.labels, value);
+      }
+
+      if (success) {
+        filledFields++;
+      } else {
+        errors.push(`${field.key}: field tidak ditemukan`);
+      }
+    } catch (e) {
+      errors.push(`${field.key}: ${e.message}`);
+    }
+  }
+
+  if (filledFields === 0 && errors.length > 0) {
+    return { 
+      success: false, 
+      error: `Tidak ada field yang berhasil diisi. Pastikan form eCourt sedang terbuka. ${errors.join('; ')}` 
+    };
+  }
+
+  return { 
+    success: true, 
+    filledFields,
+    errors: errors.length > 0 ? errors : undefined 
+  };
+}
+
+/**
+ * Fill a text input field by matching label text.
+ */
+function fillTextInput(labelPatterns, value) {
+  // Strategy 1: Find by label text in nearby elements
+  const allLabels = document.querySelectorAll('label, .label, span, div, td, th');
+  
+  for (const labelEl of allLabels) {
+    const labelText = (labelEl.textContent || '').trim().toLowerCase();
+    
+    for (const pattern of labelPatterns) {
+      if (labelText.includes(pattern.toLowerCase())) {
+        // Try to find the associated input
+        const input = findAssociatedInput(labelEl);
+        if (input) {
+          setInputValue(input, value);
+          return true;
+        }
+      }
+    }
+  }
+
+  // Strategy 2: Find inputs by placeholder or nearby text
+  const inputs = document.querySelectorAll('input[type="text"], input:not([type]), textarea');
+  for (const input of inputs) {
+    const placeholder = (input.placeholder || '').toLowerCase();
+    const nearbyText = getNearbyText(input).toLowerCase();
+    
+    for (const pattern of labelPatterns) {
+      if (placeholder.includes(pattern.toLowerCase()) || nearbyText.includes(pattern.toLowerCase())) {
+        setInputValue(input, value);
+        return true;
+      }
+    }
+  }
+
+  // Strategy 3: Try by input name or id attributes
+  const nameMap = {
+    'nama': ['nama', 'name', 'partyname'],
+    'nik': ['nik', 'noktp', 'noidentitas', 'identitynumber'],
+    'alamat': ['alamat', 'address'],
+    'tempat_lahir': ['tempatlahir', 'tempat_lahir', 'placeofbirth'],
+    'tanggal_lahir': ['tanggallahir', 'tanggal_lahir', 'dateofbirth', 'dob'],
+    'pekerjaan': ['pekerjaan', 'occupation', 'job'],
+    'kewarganegaraan': ['warganegara', 'kewarganegaraan', 'citizenship'],
+    'email': ['email'],
+    'telepon': ['telepon', 'phone', 'telp', 'hp'],
+  };
+
+  const key = labelPatterns[0].toLowerCase().replace(/\s+/g, '');
+  const namePatterns = nameMap[key] || [];
+  
+  for (const namePattern of namePatterns) {
+    const input = document.querySelector(
+      `input[name*="${namePattern}" i], input[id*="${namePattern}" i]`
+    );
+    if (input) {
+      setInputValue(input, value);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Fill a dropdown/select field by matching label text.
+ */
+function fillDropdown(labelPatterns, value) {
+  const valueLower = value.toLowerCase();
+
+  // Strategy 1: Find <select> elements near labels
+  const allLabels = document.querySelectorAll('label, .label, span, div, td, th');
+  
+  for (const labelEl of allLabels) {
+    const labelText = (labelEl.textContent || '').trim().toLowerCase();
+    
+    for (const pattern of labelPatterns) {
+      if (labelText.includes(pattern.toLowerCase())) {
+        const select = findAssociatedSelect(labelEl);
+        if (select) {
+          return setSelectValue(select, value);
+        }
+      }
+    }
+  }
+
+  // Strategy 2: Find selects by name/id
+  const selectElements = document.querySelectorAll('select');
+  for (const select of selectElements) {
+    const nameId = ((select.name || '') + (select.id || '')).toLowerCase();
+    const nearbyText = getNearbyText(select).toLowerCase();
+    
+    for (const pattern of labelPatterns) {
+      const p = pattern.toLowerCase();
+      if (nameId.includes(p) || nearbyText.includes(p)) {
+        return setSelectValue(select, value);
+      }
+    }
+  }
+
+  // Strategy 3: Custom dropdown components (click to open, then select option)
+  // Look for custom dropdown elements that might use divs/spans
+  const customDropdowns = document.querySelectorAll(
+    '.dropdown, [role="listbox"], [role="combobox"], .select-wrapper, .ant-select, .MuiSelect-root'
+  );
+  
+  for (const dropdown of customDropdowns) {
+    const nearbyText = getNearbyText(dropdown).toLowerCase();
+    for (const pattern of labelPatterns) {
+      if (nearbyText.includes(pattern.toLowerCase())) {
+        return fillCustomDropdown(dropdown, value);
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Find the input element associated with a label.
+ */
+function findAssociatedInput(labelEl) {
+  // Check for 'for' attribute
+  if (labelEl.htmlFor) {
+    const input = document.getElementById(labelEl.htmlFor);
+    if (input) return input;
+  }
+
+  // Check for nested input
+  const nestedInput = labelEl.querySelector('input, textarea');
+  if (nestedInput) return nestedInput;
+
+  // Check next sibling
+  let sibling = labelEl.nextElementSibling;
+  for (let i = 0; i < 5 && sibling; i++) {
+    const input = sibling.querySelector('input, textarea') || 
+                  (sibling.matches('input, textarea') ? sibling : null);
+    if (input) return input;
+    sibling = sibling.nextElementSibling;
+  }
+
+  // Check parent's next sibling
+  const parent = labelEl.parentElement;
+  if (parent) {
+    const parentInput = parent.querySelector('input:not([type="hidden"]), textarea');
+    if (parentInput && parentInput !== labelEl) return parentInput;
+  }
+
+  return null;
+}
+
+/**
+ * Find the select element associated with a label.
+ */
+function findAssociatedSelect(labelEl) {
+  if (labelEl.htmlFor) {
+    const select = document.getElementById(labelEl.htmlFor);
+    if (select && select.tagName === 'SELECT') return select;
+  }
+
+  const nestedSelect = labelEl.querySelector('select');
+  if (nestedSelect) return nestedSelect;
+
+  let sibling = labelEl.nextElementSibling;
+  for (let i = 0; i < 5 && sibling; i++) {
+    const select = sibling.querySelector('select') || 
+                   (sibling.matches('select') ? sibling : null);
+    if (select) return select;
+    sibling = sibling.nextElementSibling;
+  }
+
+  return null;
+}
+
+/**
+ * Get text content near an element (for matching labels).
+ */
+function getNearbyText(element) {
+  const parent = element.closest('.form-group, .form-row, .field, tr, .input-group, [class*="form"]');
+  if (parent) {
+    return parent.textContent || '';
+  }
+  return element.parentElement?.textContent || '';
+}
+
+/**
+ * Set input value and trigger events for frameworks.
+ */
+function setInputValue(input, value) {
+  // Store original value for comparison
+  const originalValue = input.value;
+  
+  // Focus the input
+  input.focus();
+  input.click();
+  
+  // Clear existing value
+  input.value = '';
+  
+  // Use native input setter to trigger React/Angular change detection
+  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype, 'value'
+  )?.set || Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype, 'value'
+  )?.set;
+  
+  if (nativeInputValueSetter) {
+    nativeInputValueSetter.call(input, value);
+  } else {
+    input.value = value;
+  }
+  
+  // Dispatch events to trigger framework bindings
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  input.dispatchEvent(new Event('blur', { bubbles: true }));
+  
+  // Double-check
+  if (input.value !== value) {
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+}
+
+/**
+ * Set select element value.
+ */
+function setSelectValue(select, value) {
+  const valueLower = value.toLowerCase();
+  const options = Array.from(select.options);
+  
+  // Try exact match first
+  let option = options.find(o => o.value.toLowerCase() === valueLower || 
+                                 o.text.toLowerCase() === valueLower);
+  
+  // Try partial match
+  if (!option) {
+    option = options.find(o => 
+      o.text.toLowerCase().includes(valueLower) || 
+      valueLower.includes(o.text.toLowerCase())
+    );
+  }
+
+  // Try common mappings
+  if (!option) {
+    const mappings = getDropdownMappings(select);
+    const mappedValue = mappings[valueLower] || valueLower;
+    option = options.find(o => 
+      o.text.toLowerCase().includes(mappedValue) || 
+      o.value.toLowerCase().includes(mappedValue)
+    );
+  }
+
+  if (option) {
+    select.value = option.value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Get common dropdown value mappings for eCourt fields.
+ */
+function getDropdownMappings(select) {
+  const nameId = ((select.name || '') + (select.id || '') + getNearbyText(select)).toLowerCase();
+  
+  // Agama mappings
+  if (nameId.includes('agama')) {
+    return {
+      'islam': 'islam',
+      'kristen': 'kristen',
+      'katolik': 'katolik',
+      'hindu': 'hindu',
+      'budha': 'budha',
+      'buddha': 'budha',
+      'konghucu': 'konghucu',
+    };
+  }
+  
+  // Jenis Kelamin mappings
+  if (nameId.includes('kelamin') || nameId.includes('jk') || nameId.includes('gender')) {
+    return {
+      'laki-laki': 'laki-laki',
+      'laki laki': 'laki-laki',
+      'laki': 'laki-laki',
+      'perempuan': 'perempuan',
+      'pria': 'laki-laki',
+      'wanita': 'perempuan',
+    };
+  }
+  
+  // Status Kawin mappings
+  if (nameId.includes('kawin') || nameId.includes('perkawinan')) {
+    return {
+      'kawin': 'kawin',
+      'belum kawin': 'belum kawin',
+      'cerai hidup': 'cerai hidup',
+      'cerai mati': 'cerai mati',
+    };
+  }
+  
+  // Pendidikan mappings
+  if (nameId.includes('pendidikan')) {
+    return {
+      'tidak sekolah': 'tidak sekolah',
+      'tidak tamat sd': 'tidak tamat sd',
+      'sd': 'sekolah dasar',
+      'smp': 'sekolah lanjutan tingkat pertama',
+      'sma': 'sekolah menengah atas',
+      'smk': 'sekolah menengah kejuruan',
+      'd1': 'diploma i',
+      'd2': 'diploma ii',
+      'd3': 'diploma iii',
+      'd4': 'diploma iv',
+      's1': 'strata i',
+      's2': 'strata ii',
+      's3': 'strata iii',
+    };
+  }
+  
+  // Status Pihak mappings
+  if (nameId.includes('status') && nameId.includes('pihak')) {
+    return {
+      'penggugat': 'penggugat',
+      'tergugat': 'tergugat',
+      'pemohon': 'pemohon',
+      'termohon': 'termohon',
+    };
+  }
+  
+  // Jenis Pihak mappings
+  if (nameId.includes('jenis') && nameId.includes('pihak')) {
+    return {
+      'perorangan': 'perorangan',
+      'badan hukum': 'badan hukum',
+    };
+  }
+  
+  // Jenis Identitas mappings
+  if (nameId.includes('jenis') && nameId.includes('identitas')) {
+    return {
+      'ktp': 'ktp',
+      'passpor': 'passpor',
+      'sim': 'sim',
+    };
+  }
+  
+  return {};
+}
+
+/**
+ * Handle custom dropdown components (non-native selects).
+ */
+function fillCustomDropdown(dropdown, value) {
+  // Try clicking the dropdown to open it
+  const trigger = dropdown.querySelector(
+    '[role="combobox"], .dropdown-toggle, .select-trigger, button, [class*="trigger"]'
+  ) || dropdown;
+  
+  trigger.click();
+  
+  // Wait for dropdown to open, then click the option
+  setTimeout(() => {
+    const options = document.querySelectorAll(
+      '[role="option"], .dropdown-item, .select-option, li[class*="option"]'
+    );
+    
+    const valueLower = value.toLowerCase();
+    for (const option of options) {
+      if (option.textContent.toLowerCase().includes(valueLower)) {
+        option.click();
+        break;
+      }
+    }
+  }, 200);
+  
+  return true; // Optimistic return
+}

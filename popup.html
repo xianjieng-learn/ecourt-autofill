@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>eCourt AutoFill</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      width: 380px;
+      min-height: 200px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8f9fa;
+      color: #1a1a2e;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: white;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-icon {
+      font-size: 22px;
+    }
+
+    .header-text h1 {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .header-text p {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 2px;
+    }
+
+    .main {
+      padding: 14px 16px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .json-area {
+      width: 100%;
+      height: 100px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      resize: vertical;
+      background: white;
+      transition: border-color 0.2s;
+    }
+
+    .json-area:focus {
+      outline: none;
+      border-color: #1a1a2e;
+    }
+
+    .json-area::placeholder {
+      color: #aaa;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: #1a1a2e;
+      color: white;
+    }
+    .btn-primary:hover { background: #16213e; }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+
+    .btn-secondary {
+      background: #e8e8e8;
+      color: #333;
+    }
+    .btn-secondary:hover { background: #ddd; }
+
+    .btn-paste {
+      background: #f0f0f0;
+      color: #555;
+      flex: 0 0 auto;
+      padding: 10px 14px;
+    }
+    .btn-paste:hover { background: #e0e0e0; }
+
+    .status {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status.show { display: flex; }
+    .status.success { background: #d4edda; color: #155724; }
+    .status.error { background: #f8d7da; color: #721c24; }
+    .status.info { background: #d1ecf1; color: #0c5460; }
+
+    .preview {
+      margin-top: 10px;
+      padding: 10px;
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 11px;
+      display: none;
+    }
+
+    .preview.show { display: block; }
+
+    .preview-header {
+      font-weight: 600;
+      color: #1a1a2e;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .preview-field {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .preview-field:last-child { border-bottom: none; }
+
+    .preview-label {
+      color: #888;
+      font-size: 10px;
+    }
+
+    .preview-value {
+      color: #333;
+      font-weight: 500;
+      max-width: 200px;
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .field-count {
+      font-size: 10px;
+      color: #888;
+      font-weight: normal;
+    }
+
+    .footer {
+      padding: 10px 16px;
+      border-top: 1px solid #e8e8e8;
+      font-size: 10px;
+      color: #aaa;
+      text-align: center;
+    }
+
+    .parties-list {
+      margin-top: 8px;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .party-btn {
+      width: 100%;
+      padding: 8px 10px;
+      margin-bottom: 4px;
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+      font-size: 11px;
+      transition: all 0.15s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .party-btn:hover { border-color: #1a1a2e; background: #f8f9ff; }
+    .party-btn.selected { border-color: #1a1a2e; background: #1a1a2e; color: white; }
+
+    .party-role {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #e8e8e8;
+      color: #555;
+      font-weight: 600;
+    }
+
+    .party-btn.selected .party-role {
+      background: rgba(255,255,255,0.2);
+      color: white;
+    }
+
+    .party-name {
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="header-icon">⚖️</span>
+    <div class="header-text">
+      <h1>eCourt AutoFill</h1>
+      <p>PTSP Helper → eCourt Form</p>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="section-label">Data dari PTSP Helper</div>
+    <textarea 
+      class="json-area" 
+      id="jsonInput" 
+      placeholder='Paste JSON dari PTSP Helper di sini...&#10;&#10;Klik tombol "Copy JSON" di PTSP Helper, lalu paste di sini.'
+    ></textarea>
+
+    <div class="btn-row">
+      <button class="btn btn-paste" id="btnPaste" title="Paste dari clipboard">📋 Paste</button>
+      <button class="btn btn-secondary" id="btnParse">🔍 Parse</button>
+      <button class="btn btn-primary" id="btnFill" disabled>⚡ Fill Form</button>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <div class="preview" id="preview"></div>
+
+    <div class="parties-list" id="partiesList" style="display:none"></div>
+  </div>
+
+  <div class="footer">
+    Klik "Copy JSON" di PTSP Helper → Paste di sini → Fill Form
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
