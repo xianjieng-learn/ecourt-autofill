@@ -1,6 +1,6 @@
 # eCourt AutoFill - Chrome Extension
 
-Auto-fill form identitas pihak di eCourt dari hasil ekstraksi PTSP Helper.
+Auto-fill form identitas pihak **dan** form buat akun di eCourt dari hasil ekstraksi PTSP Helper.
 
 ## Cara Pakai
 
@@ -17,41 +17,77 @@ Auto-fill form identitas pihak di eCourt dari hasil ekstraksi PTSP Helper.
 1. Upload dokumen gugatan ke **PTSP Helper**
 2. Klik tombol **"📋 Copy JSON (eCourt)"** di samping data pihak
    - Atau klik **"📋 Copy Semua JSON (eCourt AutoFill)"** untuk copy semua pihak
-3. Buka form pendaftaran perkara di **eCourt**
+3. Buka form di **eCourt** (Tambah Pengguna atau Input Identitas)
 4. Klik icon extension di toolbar Chrome
 5. Klik **📋 Paste** (atau paste manual Ctrl+V)
 6. Klik **🔍 Parse** untuk preview data
 7. Pilih pihak yang mau di-fill (kalau ada banyak)
-8. Klik **⚡ Fill Form**
+8. Klik **⚡ Fill Form** — extension otomatis detect form type
 
-### 3. Yang Di-Fill Otomatis
+---
+
+## Form yang Didukung
+
+### 1. Tambah Pengguna (Buat Akun)
 
 | Field eCourt | Sumber dari PTSP Helper |
 |---|---|
-| Nama | nama |
-| Nomor Identitas | nik |
-| Alamat | alamat |
+| Nama * | nama (tanda petik dihapus otomatis!) |
+| Nomor Induk Kependudukan * | nik |
 | Tempat Lahir | tempat_lahir |
 | Tanggal Lahir | tanggal_lahir |
-| Pekerjaan | pekerjaan |
+| Pekerjaan * | pekerjaan |
+| E-Mail * | domisili_email |
+| Nomor Telepon | domisili_wa |
+| Handphone | domisili_wa |
+| Alamat * | alamat |
+| Jenis Kelamin | jenis_kelamin (dropdown) |
+| Agama | agama (dropdown) |
+| Status Kawin | status_kawin (dropdown) |
+| Pendidikan | pendidikan (dropdown) |
+
+> ⚠️ **Bank, No Rekening, Akun Bank** perlu diisi manual karena tidak ada di dokumen gugatan.
+
+### 2. Input Identitas Pihak (Daftar Perkara)
+
+| Field eCourt | Sumber dari PTSP Helper |
+|---|---|
+| Nama * | nama |
+| Nomor Identitas * | nik |
+| Alamat * | alamat |
+| Tempat Lahir * | tempat_lahir |
+| Tanggal Lahir * | tanggal_lahir |
+| Pekerjaan * | pekerjaan |
 | Warga Negara | kewarganegaraan |
-| Email | domisili_email |
+| Email * | domisili_email |
 | Telepon | domisili_wa |
 | Agama | agama (dropdown) |
 | Jenis Kelamin | jenis_kelamin (dropdown) |
 | Pendidikan | pendidikan (dropdown) |
 | Status Kawin | status_kawin (dropdown) |
 
-### 4. Yang Perlu Di-Fill Manual
+### Yang Perlu Di-Fill Manual
 
-Beberapa field dropdown yang bergantung pada alamat:
-- **Provinsi** → pilih manual
-- **Kabupaten** → pilih manual
-- **Kecamatan** → pilih manual
-- **Kelurahan** → pilih manual
-- **Status Pihak** → Penggugat/Tergugat (pilih manual)
-- **Jenis Pihak** → Perorangan/Badan Hukum (pilih manual)
-- **Jenis Identitas** → KTP (biasanya sudah default)
+**Form Tambah Pengguna:**
+- Bank, No Rekening, Akun Bank
+- Umur/Usia
+- Berkebutuhan Khusus
+
+**Form Identitas Pihak:**
+- Status Pihak (Penggugat/Tergugat)
+- Jenis Pihak (Perorangan/Badan Hukum)
+- Jenis Identitas (KTP)
+- Provinsi, Kabupaten, Kecamatan, Kelurahan
+
+---
+
+## ⚠️ Penting: Nama Tidak Boleh Pakai Tanda Petik
+
+eCourt **tidak mengizinkan tanda petik (')** di field Nama karena akan bermasalah di tahap ePayment.
+
+Extension otomatis menghapus tanda petik dari nama. Tapi tetap cek ulang sebelum submit!
+
+---
 
 ## Troubleshooting
 
@@ -74,19 +110,11 @@ Beberapa field dropdown yang bergantung pada alamat:
 ecourt-autofill/
 ├── manifest.json      # Extension config
 ├── popup.html         # UI popup
-├── popup.js           # Popup logic
-├── content.js         # Form filling logic (runs on eCourt page)
+├── popup.js           # Popup logic (handles both forms)
+├── content.js         # Form filling logic (auto-detects form type)
 ├── icons/
 │   ├── icon16.png
 │   ├── icon48.png
 │   └── icon128.png
 └── README.md          # This file
 ```
-
-## Development
-
-Untuk modify extension:
-1. Edit file yang diperlukan
-2. Buka `chrome://extensions/`
-3. Klik refresh (↻) di extension card
-4. Test di halaman eCourt

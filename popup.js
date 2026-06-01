@@ -1,6 +1,6 @@
 /**
  * eCourt AutoFill - Popup Script
- * Reads JSON from PTSP Helper and sends to content script for form filling.
+ * Handles both Account Creation and Identity forms.
  */
 
 const jsonInput = document.getElementById('jsonInput');
@@ -97,8 +97,13 @@ function normalizeParty(p) {
     kewarganegaraan: p.kewarganegaraan || 'Indonesia',
     email: p.email || p.domisili_email || '',
     telepon: p.telepon || p.domisili_wa || p.phone || '',
+    handphone: p.handphone || p.domisili_wa || '',
     jenis_kelamin: p.jenis_kelamin || p.jk || '',
     status_kawin: p.status_kawin || '',
+    // Account-specific fields (for Tambah Pengguna)
+    bank: p.bank || '',
+    no_rekening: p.no_rekening || '',
+    akun_bank: p.akun_bank || '',
     _raw: p,
   };
 }
@@ -149,6 +154,10 @@ function renderPreview(party) {
     ['Telepon', party.telepon],
     ['JK', party.jenis_kelamin],
     ['Status Kawin', party.status_kawin],
+    // Account-specific
+    ['Bank', party.bank],
+    ['No Rekening', party.no_rekening],
+    ['Akun Bank', party.akun_bank],
   ];
 
   const filled = fields.filter(([_, v]) => v);
@@ -175,7 +184,7 @@ function renderPreview(party) {
   previewEl.className = 'preview show';
 }
 
-// ─── Fill form ───
+// ─── Fill form (auto-detect type) ───
 async function fillForm() {
   if (!selectedParty) {
     showStatus('⚠️ Pilih pihak yang mau di-fill dulu.', 'error');
@@ -196,14 +205,30 @@ async function fillForm() {
       return;
     }
 
-    const response = await chrome.tabs.sendMessage(tab.id, {
-      action: 'fillForm',
-      data: selectedParty,
+    // First detect form type
+    const detectResponse = await chrome.tabs.sendMessage(tab.id, {
+      action: 'detectForm',
     });
+
+    let response;
+    if (detectResponse && detectResponse.type === 'account') {
+      // Fill account creation form
+      response = await chrome.tabs.sendMessage(tab.id, {
+        action: 'fillAccountForm',
+        data: selectedParty,
+      });
+    } else {
+      // Fill identity form (default)
+      response = await chrome.tabs.sendMessage(tab.id, {
+        action: 'fillForm',
+        data: selectedParty,
+      });
+    }
 
     if (response && response.success) {
       const filledCount = response.filledFields || 0;
-      showStatus(`✅ Berhasil mengisi ${filledCount} field!`, 'success');
+      const formType = detectResponse?.type === 'account' ? 'akun' : 'identitas';
+      showStatus(`✅ Berhasil mengisi ${filledCount} field di form ${formType}!`, 'success');
     } else {
       showStatus(`⚠️ ${response?.error || 'Gagal mengisi form'}`, 'error');
     }

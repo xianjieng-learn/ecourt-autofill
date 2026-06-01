@@ -1,21 +1,50 @@
 /**
  * eCourt AutoFill - Content Script
  * Injected into ecourt.mahkamahagung.go.id pages.
- * Receives party data from popup and fills the form.
+ * Handles TWO forms:
+ *   1. Tambah Pengguna (account creation)
+ *   2. Input Identitas Pihak (case registration)
  */
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'fillForm') {
+  if (request.action === 'detectForm') {
+    const type = detectFormType();
+    sendResponse({ type });
+  } else if (request.action === 'fillForm') {
     const result = fillEcourtForm(request.data);
     sendResponse(result);
+  } else if (request.action === 'fillAccountForm') {
+    const result = fillAccountForm(request.data);
+    sendResponse(result);
   }
-  return true; // Keep channel open for async response
+  return true;
 });
 
 /**
- * Main form filling function.
- * Handles various eCourt form field types.
+ * Detect which form is currently visible.
+ */
+function detectFormType() {
+  const bodyText = (document.body?.textContent || '').toLowerCase();
+  
+  if (bodyText.includes('tambah pengguna') || bodyText.includes('buat akun')) {
+    return 'account';
+  }
+  if (bodyText.includes('pendaftaran perkara') || bodyText.includes('identitas pihak')) {
+    return 'identity';
+  }
+  
+  // Check for specific fields
+  if (document.querySelector('input[placeholder*="Rekening"]') || 
+      document.querySelector('input[name*="rekening"]')) {
+    return 'account';
+  }
+  
+  return 'unknown';
+}
+
+/**
+ * Main form filling function for Identity form.
  */
 function fillEcourtForm(data) {
   let filledFields = 0;
@@ -24,14 +53,14 @@ function fillEcourtForm(data) {
   // ─── Field mapping: party data key → form field label pattern ───
   const fieldMap = [
     { key: 'nama',             labels: ['Nama', 'Nama Lengkap'], type: 'text' },
-    { key: 'nik',              labels: ['Nomor Identitas', 'NIK', 'No KTP'], type: 'text' },
+    { key: 'nik',              labels: ['Nomor Identitas', 'NIK', 'No KTP', 'Nomor Induk Kependudukan'], type: 'text' },
     { key: 'alamat',           labels: ['Alamat'], type: 'text' },
     { key: 'tempat_lahir',     labels: ['Tempat Lahir'], type: 'text' },
     { key: 'tanggal_lahir',    labels: ['Tanggal Lahir', 'Tgl Lahir'], type: 'text' },
     { key: 'pekerjaan',        labels: ['Pekerjaan'], type: 'text' },
     { key: 'kewarganegaraan',  labels: ['Warga Negara', 'WN'], type: 'text' },
     { key: 'email',            labels: ['Email', 'e-mail'], type: 'text' },
-    { key: 'telepon',          labels: ['Telepon', 'Telp', 'HP', 'No HP', 'No Telp'], type: 'text' },
+    { key: 'telepon',          labels: ['Telepon', 'Telp', 'HP', 'No HP', 'No Telp', 'Handphone'], type: 'text' },
     { key: 'agama',            labels: ['Agama'], type: 'dropdown' },
     { key: 'jenis_kelamin',    labels: ['Jenis Kelamin', 'JK'], type: 'dropdown' },
     { key: 'pendidikan',       labels: ['Pendidikan'], type: 'dropdown' },
@@ -49,7 +78,12 @@ function fillEcourtForm(data) {
       if (field.type === 'dropdown') {
         success = fillDropdown(field.labels, value);
       } else {
-        success = fillTextInput(field.labels, value);
+        // Special handling for nama: remove apostrophes
+        let cleanValue = value;
+        if (field.key === 'nama') {
+          cleanValue = value.replace(/['']/g, '').replace(/[''"`]/g, '');
+        }
+        success = fillTextInput(field.labels, cleanValue);
       }
 
       if (success) {
@@ -66,6 +100,80 @@ function fillEcourtForm(data) {
     return { 
       success: false, 
       error: `Tidak ada field yang berhasil diisi. Pastikan form eCourt sedang terbuka. ${errors.join('; ')}` 
+    };
+  }
+
+  return { 
+    success: true, 
+    filledFields,
+    errors: errors.length > 0 ? errors : undefined 
+  };
+}
+
+/**
+ * Form filling for Account Creation (Tambah Pengguna).
+ * Has additional fields: Bank, No Rekening, Akun Bank, Umur, Berkebutuhan Khusus.
+ */
+function fillAccountForm(data) {
+  let filledFields = 0;
+  const errors = [];
+
+  // ─── Account form field mapping ───
+  const fieldMap = [
+    // Standard fields
+    { key: 'nama',             labels: ['Nama', 'Nama Lengkap'], type: 'text' },
+    { key: 'nik',              labels: ['Nomor Induk Kependudukan', 'NIK', 'No KTP', 'Nomor Identitas'], type: 'text' },
+    { key: 'tempat_lahir',     labels: ['Tempat Lahir'], type: 'text' },
+    { key: 'tanggal_lahir',    labels: ['Tanggal Lahir', 'Tgl Lahir'], type: 'text' },
+    { key: 'pekerjaan',        labels: ['Pekerjaan'], type: 'text' },
+    { key: 'email',            labels: ['Email', 'E-Mail', 'e-mail'], type: 'text' },
+    { key: 'telepon',          labels: ['Telepon', 'Nomor Telepon', 'Telp'], type: 'text' },
+    { key: 'handphone',        labels: ['Handphone', 'HP', 'No HP'], type: 'text' },
+    { key: 'alamat',           labels: ['Alamat'], type: 'text' },
+    // Dropdowns
+    { key: 'jenis_kelamin',    labels: ['Jenis Kelamin', 'JK'], type: 'dropdown' },
+    { key: 'agama',            labels: ['Agama'], type: 'dropdown' },
+    { key: 'status_kawin',     labels: ['Status Kawin', 'Status Perkawinan'], type: 'dropdown' },
+    { key: 'pendidikan',       labels: ['Pendidikan'], type: 'dropdown' },
+    // Account-specific fields
+    { key: 'bank',             labels: ['Bank'], type: 'dropdown' },
+    { key: 'no_rekening',      labels: ['No Rekening', 'Nomor Rekening'], type: 'text' },
+    { key: 'akun_bank',        labels: ['Akun Bank', 'Nama Rekening', 'Atas Nama'], type: 'text' },
+  ];
+
+  // ─── Fill each field ───
+  for (const field of fieldMap) {
+    const value = data[field.key];
+    if (!value) continue;
+
+    try {
+      let success = false;
+      
+      if (field.type === 'dropdown') {
+        success = fillDropdown(field.labels, value);
+      } else {
+        // Special handling for nama: remove apostrophes (eCourt requirement!)
+        let cleanValue = value;
+        if (field.key === 'nama') {
+          cleanValue = value.replace(/['']/g, '').replace(/[''"`]/g, '');
+        }
+        success = fillTextInput(field.labels, cleanValue);
+      }
+
+      if (success) {
+        filledFields++;
+      } else {
+        errors.push(`${field.key}: field tidak ditemukan`);
+      }
+    } catch (e) {
+      errors.push(`${field.key}: ${e.message}`);
+    }
+  }
+
+  if (filledFields === 0 && errors.length > 0) {
+    return { 
+      success: false, 
+      error: `Tidak ada field yang berhasil diisi. Pastikan form Tambah Pengguna sedang terbuka. ${errors.join('; ')}` 
     };
   }
 
@@ -115,14 +223,17 @@ function fillTextInput(labelPatterns, value) {
   // Strategy 3: Try by input name or id attributes
   const nameMap = {
     'nama': ['nama', 'name', 'partyname'],
-    'nik': ['nik', 'noktp', 'noidentitas', 'identitynumber'],
+    'nik': ['nik', 'noktp', 'noidentitas', 'identitynumber', 'noktp'],
     'alamat': ['alamat', 'address'],
     'tempat_lahir': ['tempatlahir', 'tempat_lahir', 'placeofbirth'],
     'tanggal_lahir': ['tanggallahir', 'tanggal_lahir', 'dateofbirth', 'dob'],
     'pekerjaan': ['pekerjaan', 'occupation', 'job'],
     'kewarganegaraan': ['warganegara', 'kewarganegaraan', 'citizenship'],
     'email': ['email'],
-    'telepon': ['telepon', 'phone', 'telp', 'hp'],
+    'telepon': ['telepon', 'phone', 'telp'],
+    'handphone': ['handphone', 'hp', 'mobile'],
+    'no_rekening': ['rekening', 'norekening'],
+    'akun_bank': ['akunbank', 'namarekening', 'atasnama'],
   };
 
   const key = labelPatterns[0].toLowerCase().replace(/\s+/g, '');
@@ -177,8 +288,7 @@ function fillDropdown(labelPatterns, value) {
     }
   }
 
-  // Strategy 3: Custom dropdown components (click to open, then select option)
-  // Look for custom dropdown elements that might use divs/spans
+  // Strategy 3: Custom dropdown components
   const customDropdowns = document.querySelectorAll(
     '.dropdown, [role="listbox"], [role="combobox"], .select-wrapper, .ant-select, .MuiSelect-root'
   );
@@ -424,6 +534,23 @@ function getDropdownMappings(select) {
       'ktp': 'ktp',
       'passpor': 'passpor',
       'sim': 'sim',
+    };
+  }
+  
+  // Bank mappings
+  if (nameId.includes('bank')) {
+    return {
+      'bri': 'bri',
+      'bni': 'bni',
+      'mandiri': 'mandiri',
+      'bca': 'bca',
+      'bsi': 'bsi',
+      'btn': 'btn',
+      'bukopin': 'bukopin',
+      'danamon': 'danamon',
+      'permata': 'permata',
+      'cimb': 'cimb niaga',
+      'mega': 'bank mega',
     };
   }
   
