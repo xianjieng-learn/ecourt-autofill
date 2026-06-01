@@ -45,16 +45,25 @@ function detectFormType() {
 
 /**
  * Main form filling function for Identity form.
+ * Alamat includes WA number if available.
  */
 function fillEcourtForm(data) {
   let filledFields = 0;
   const errors = [];
 
+  // ─── Build enhanced alamat with WA number ───
+  let alamatValue = data.alamat || '';
+  if (data.telepon && alamatValue && !alamatValue.includes(data.telepon)) {
+    alamatValue = `${alamatValue}, WA: ${data.telepon}`;
+  } else if (data.telepon && !alamatValue) {
+    alamatValue = `WA: ${data.telepon}`;
+  }
+
   // ─── Field mapping: party data key → form field label pattern ───
   const fieldMap = [
     { key: 'nama',             labels: ['Nama', 'Nama Lengkap'], type: 'text' },
     { key: 'nik',              labels: ['Nomor Identitas', 'NIK', 'No KTP', 'Nomor Induk Kependudukan'], type: 'text' },
-    { key: 'alamat',           labels: ['Alamat'], type: 'text' },
+    { key: 'alamat',           labels: ['Alamat'], type: 'text', overrideValue: alamatValue },
     { key: 'tempat_lahir',     labels: ['Tempat Lahir'], type: 'text' },
     { key: 'tanggal_lahir',    labels: ['Tanggal Lahir', 'Tgl Lahir'], type: 'text' },
     { key: 'pekerjaan',        labels: ['Pekerjaan'], type: 'text' },
@@ -67,47 +76,7 @@ function fillEcourtForm(data) {
     { key: 'status_kawin',     labels: ['Status Kawin', 'Status Perkawinan'], type: 'dropdown' },
   ];
 
-  // ─── Fill each field ───
-  for (const field of fieldMap) {
-    const value = data[field.key];
-    if (!value) continue;
-
-    try {
-      let success = false;
-      
-      if (field.type === 'dropdown') {
-        success = fillDropdown(field.labels, value);
-      } else {
-        // Special handling for nama: remove apostrophes
-        let cleanValue = value;
-        if (field.key === 'nama') {
-          cleanValue = value.replace(/['']/g, '').replace(/[''"`]/g, '');
-        }
-        success = fillTextInput(field.labels, cleanValue);
-      }
-
-      if (success) {
-        filledFields++;
-      } else {
-        errors.push(`${field.key}: field tidak ditemukan`);
-      }
-    } catch (e) {
-      errors.push(`${field.key}: ${e.message}`);
-    }
-  }
-
-  if (filledFields === 0 && errors.length > 0) {
-    return { 
-      success: false, 
-      error: `Tidak ada field yang berhasil diisi. Pastikan form eCourt sedang terbuka. ${errors.join('; ')}` 
-    };
-  }
-
-  return { 
-    success: true, 
-    filledFields,
-    errors: errors.length > 0 ? errors : undefined 
-  };
+  return fillFields(fieldMap, data, filledFields, errors);
 }
 
 /**
@@ -141,9 +110,15 @@ function fillAccountForm(data) {
     { key: 'akun_bank',        labels: ['Akun Bank', 'Nama Rekening', 'Atas Nama'], type: 'text' },
   ];
 
-  // ─── Fill each field ───
+  return fillFields(fieldMap, data, filledFields, errors);
+}
+
+/**
+ * Shared fill logic for both forms.
+ */
+function fillFields(fieldMap, data, filledFields, errors) {
   for (const field of fieldMap) {
-    const value = data[field.key];
+    const value = field.overrideValue || data[field.key];
     if (!value) continue;
 
     try {
@@ -173,7 +148,7 @@ function fillAccountForm(data) {
   if (filledFields === 0 && errors.length > 0) {
     return { 
       success: false, 
-      error: `Tidak ada field yang berhasil diisi. Pastikan form Tambah Pengguna sedang terbuka. ${errors.join('; ')}` 
+      error: `Tidak ada field yang berhasil diisi. Pastikan form eCourt sedang terbuka. ${errors.join('; ')}` 
     };
   }
 
@@ -196,7 +171,6 @@ function fillTextInput(labelPatterns, value) {
     
     for (const pattern of labelPatterns) {
       if (labelText.includes(pattern.toLowerCase())) {
-        // Try to find the associated input
         const input = findAssociatedInput(labelEl);
         if (input) {
           setInputValue(input, value);
@@ -309,17 +283,14 @@ function fillDropdown(labelPatterns, value) {
  * Find the input element associated with a label.
  */
 function findAssociatedInput(labelEl) {
-  // Check for 'for' attribute
   if (labelEl.htmlFor) {
     const input = document.getElementById(labelEl.htmlFor);
     if (input) return input;
   }
 
-  // Check for nested input
   const nestedInput = labelEl.querySelector('input, textarea');
   if (nestedInput) return nestedInput;
 
-  // Check next sibling
   let sibling = labelEl.nextElementSibling;
   for (let i = 0; i < 5 && sibling; i++) {
     const input = sibling.querySelector('input, textarea') || 
@@ -328,7 +299,6 @@ function findAssociatedInput(labelEl) {
     sibling = sibling.nextElementSibling;
   }
 
-  // Check parent's next sibling
   const parent = labelEl.parentElement;
   if (parent) {
     const parentInput = parent.querySelector('input:not([type="hidden"]), textarea');
@@ -376,17 +346,10 @@ function getNearbyText(element) {
  * Set input value and trigger events for frameworks.
  */
 function setInputValue(input, value) {
-  // Store original value for comparison
-  const originalValue = input.value;
-  
-  // Focus the input
   input.focus();
   input.click();
-  
-  // Clear existing value
   input.value = '';
   
-  // Use native input setter to trigger React/Angular change detection
   const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
     window.HTMLInputElement.prototype, 'value'
   )?.set || Object.getOwnPropertyDescriptor(
@@ -399,12 +362,10 @@ function setInputValue(input, value) {
     input.value = value;
   }
   
-  // Dispatch events to trigger framework bindings
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));
   input.dispatchEvent(new Event('blur', { bubbles: true }));
   
-  // Double-check
   if (input.value !== value) {
     input.value = value;
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -419,11 +380,9 @@ function setSelectValue(select, value) {
   const valueLower = value.toLowerCase();
   const options = Array.from(select.options);
   
-  // Try exact match first
   let option = options.find(o => o.value.toLowerCase() === valueLower || 
                                  o.text.toLowerCase() === valueLower);
   
-  // Try partial match
   if (!option) {
     option = options.find(o => 
       o.text.toLowerCase().includes(valueLower) || 
@@ -431,7 +390,6 @@ function setSelectValue(select, value) {
     );
   }
 
-  // Try common mappings
   if (!option) {
     const mappings = getDropdownMappings(select);
     const mappedValue = mappings[valueLower] || valueLower;
@@ -456,101 +414,54 @@ function setSelectValue(select, value) {
 function getDropdownMappings(select) {
   const nameId = ((select.name || '') + (select.id || '') + getNearbyText(select)).toLowerCase();
   
-  // Agama mappings
   if (nameId.includes('agama')) {
     return {
-      'islam': 'islam',
-      'kristen': 'kristen',
-      'katolik': 'katolik',
-      'hindu': 'hindu',
-      'budha': 'budha',
-      'buddha': 'budha',
-      'konghucu': 'konghucu',
+      'islam': 'islam', 'kristen': 'kristen', 'katolik': 'katolik',
+      'hindu': 'hindu', 'budha': 'budha', 'buddha': 'budha', 'konghucu': 'konghucu',
     };
   }
   
-  // Jenis Kelamin mappings
   if (nameId.includes('kelamin') || nameId.includes('jk') || nameId.includes('gender')) {
     return {
-      'laki-laki': 'laki-laki',
-      'laki laki': 'laki-laki',
-      'laki': 'laki-laki',
-      'perempuan': 'perempuan',
-      'pria': 'laki-laki',
-      'wanita': 'perempuan',
+      'laki-laki': 'laki-laki', 'laki laki': 'laki-laki', 'laki': 'laki-laki',
+      'perempuan': 'perempuan', 'pria': 'laki-laki', 'wanita': 'perempuan',
     };
   }
   
-  // Status Kawin mappings
   if (nameId.includes('kawin') || nameId.includes('perkawinan')) {
     return {
-      'kawin': 'kawin',
-      'belum kawin': 'belum kawin',
-      'cerai hidup': 'cerai hidup',
-      'cerai mati': 'cerai mati',
+      'kawin': 'kawin', 'belum kawin': 'belum kawin',
+      'cerai hidup': 'cerai hidup', 'cerai mati': 'cerai mati',
     };
   }
   
-  // Pendidikan mappings
   if (nameId.includes('pendidikan')) {
     return {
-      'tidak sekolah': 'tidak sekolah',
-      'tidak tamat sd': 'tidak tamat sd',
-      'sd': 'sekolah dasar',
-      'smp': 'sekolah lanjutan tingkat pertama',
-      'sma': 'sekolah menengah atas',
-      'smk': 'sekolah menengah kejuruan',
-      'd1': 'diploma i',
-      'd2': 'diploma ii',
-      'd3': 'diploma iii',
-      'd4': 'diploma iv',
-      's1': 'strata i',
-      's2': 'strata ii',
-      's3': 'strata iii',
+      'tidak sekolah': 'tidak sekolah', 'tidak tamat sd': 'tidak tamat sd',
+      'sd': 'sekolah dasar', 'smp': 'sekolah lanjutan tingkat pertama',
+      'sma': 'sekolah menengah atas', 'smk': 'sekolah menengah kejuruan',
+      'd1': 'diploma i', 'd2': 'diploma ii', 'd3': 'diploma iii', 'd4': 'diploma iv',
+      's1': 'strata i', 's2': 'strata ii', 's3': 'strata iii',
     };
   }
   
-  // Status Pihak mappings
   if (nameId.includes('status') && nameId.includes('pihak')) {
-    return {
-      'penggugat': 'penggugat',
-      'tergugat': 'tergugat',
-      'pemohon': 'pemohon',
-      'termohon': 'termohon',
-    };
+    return { 'penggugat': 'penggugat', 'tergugat': 'tergugat', 'pemohon': 'pemohon', 'termohon': 'termohon' };
   }
   
-  // Jenis Pihak mappings
   if (nameId.includes('jenis') && nameId.includes('pihak')) {
-    return {
-      'perorangan': 'perorangan',
-      'badan hukum': 'badan hukum',
-    };
+    return { 'perorangan': 'perorangan', 'badan hukum': 'badan hukum' };
   }
   
-  // Jenis Identitas mappings
   if (nameId.includes('jenis') && nameId.includes('identitas')) {
-    return {
-      'ktp': 'ktp',
-      'passpor': 'passpor',
-      'sim': 'sim',
-    };
+    return { 'ktp': 'ktp', 'passpor': 'passpor', 'sim': 'sim' };
   }
   
-  // Bank mappings
   if (nameId.includes('bank')) {
     return {
-      'bri': 'bri',
-      'bni': 'bni',
-      'mandiri': 'mandiri',
-      'bca': 'bca',
-      'bsi': 'bsi',
-      'btn': 'btn',
-      'bukopin': 'bukopin',
-      'danamon': 'danamon',
-      'permata': 'permata',
-      'cimb': 'cimb niaga',
-      'mega': 'bank mega',
+      'bri': 'bri', 'bni': 'bni', 'mandiri': 'mandiri', 'bca': 'bca',
+      'bsi': 'bsi', 'btn': 'btn', 'bukopin': 'bukopin', 'danamon': 'danamon',
+      'permata': 'permata', 'cimb': 'cimb niaga', 'mega': 'bank mega',
     };
   }
   
@@ -561,14 +472,12 @@ function getDropdownMappings(select) {
  * Handle custom dropdown components (non-native selects).
  */
 function fillCustomDropdown(dropdown, value) {
-  // Try clicking the dropdown to open it
   const trigger = dropdown.querySelector(
     '[role="combobox"], .dropdown-toggle, .select-trigger, button, [class*="trigger"]'
   ) || dropdown;
   
   trigger.click();
   
-  // Wait for dropdown to open, then click the option
   setTimeout(() => {
     const options = document.querySelectorAll(
       '[role="option"], .dropdown-item, .select-option, li[class*="option"]'
@@ -583,5 +492,5 @@ function fillCustomDropdown(dropdown, value) {
     }
   }, 200);
   
-  return true; // Optimistic return
+  return true;
 }
