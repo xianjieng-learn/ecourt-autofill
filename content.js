@@ -87,6 +87,10 @@ function fillAccountForm(data) {
   let filledFields = 0;
   const errors = [];
 
+  // ─── WA number goes to BOTH telepon and handphone ───
+  const waNumber = data.telepon || data.handphone || '';
+  const effectiveData = { ...data, telepon: waNumber, handphone: waNumber };
+
   // ─── Account form field mapping ───
   const fieldMap = [
     // Standard fields
@@ -110,7 +114,7 @@ function fillAccountForm(data) {
     { key: 'akun_bank',        labels: ['Akun Bank', 'Nama Rekening', 'Atas Nama'], type: 'text' },
   ];
 
-  return fillFields(fieldMap, data, filledFields, errors);
+  return fillFields(fieldMap, effectiveData, filledFields, errors);
 }
 
 /**
@@ -182,12 +186,13 @@ function fillTextInput(labelPatterns, value) {
     'alamat': ['alamat', 'szAlamat'],
     'email': ['szEmail', 'email'],
     'e-mail': ['szEmail'],
-    'telepon': ['szTelepon'],
-    'telp': ['szTelepon'],
-    'notelepon': ['szTelepon'],
-    'handphone': ['szHandphone'],
-    'hp': ['szHandphone'],
-    'nohp': ['szHandphone'],
+    'telepon': ['szNoTelepon'],
+    'telp': ['szNoTelepon'],
+    'notelepon': ['szNoTelepon'],
+    'nomortelepon': ['szNoTelepon'],
+    'handphone': ['szHp'],
+    'hp': ['szHp'],
+    'nohp': ['szHp'],
     'warganegara': ['szKewarganegaraan'],
     'kewarganegaraan': ['szKewarganegaraan'],
     'wn': ['szKewarganegaraan'],
