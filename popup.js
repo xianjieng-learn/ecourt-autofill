@@ -205,10 +205,24 @@ async function fillForm() {
       return;
     }
 
-    // First detect form type
-    const detectResponse = await chrome.tabs.sendMessage(tab.id, {
-      action: 'detectForm',
-    });
+    // First detect form type, with auto-inject fallback
+    let detectResponse;
+    try {
+      detectResponse = await chrome.tabs.sendMessage(tab.id, {
+        action: 'detectForm',
+      });
+    } catch (sendErr) {
+      // Content script not injected yet — inject it programmatically, then retry
+      showStatus('⏳ Injecting content script...', 'info');
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content.js'],
+      });
+      await new Promise(r => setTimeout(r, 200));
+      detectResponse = await chrome.tabs.sendMessage(tab.id, {
+        action: 'detectForm',
+      });
+    }
 
     let response;
     if (detectResponse && detectResponse.type === 'account') {
