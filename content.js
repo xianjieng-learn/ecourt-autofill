@@ -91,6 +91,14 @@ function fillAccountForm(data) {
   const waNumber = data.telepon || data.handphone || '';
   const effectiveData = { ...data, telepon: waNumber, handphone: waNumber };
 
+  // ─── Build enhanced alamat with WA number ───
+  let alamatValue = effectiveData.alamat || '';
+  if (waNumber && alamatValue && !alamatValue.includes(waNumber)) {
+    alamatValue = `${alamatValue}, WA: ${waNumber}`;
+  } else if (waNumber && !alamatValue) {
+    alamatValue = `WA: ${waNumber}`;
+  }
+
   // ─── Account form field mapping ───
   const fieldMap = [
     // Standard fields
@@ -102,7 +110,7 @@ function fillAccountForm(data) {
     { key: 'email',            labels: ['Email', 'E-Mail', 'e-mail'], type: 'text' },
     { key: 'telepon',          labels: ['Telepon', 'Nomor Telepon', 'Telp'], type: 'text' },
     { key: 'handphone',        labels: ['Handphone', 'HP', 'No HP'], type: 'text' },
-    { key: 'alamat',           labels: ['Alamat'], type: 'text' },
+    { key: 'alamat',           labels: ['Alamat'], type: 'text', overrideValue: alamatValue },
     // Dropdowns
     { key: 'jenis_kelamin',    labels: ['Jenis Kelamin', 'JK'], type: 'dropdown' },
     { key: 'agama',            labels: ['Agama'], type: 'dropdown' },
