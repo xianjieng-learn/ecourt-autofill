@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Auto-fill form identitas pihak di eCourt dari hasil ekstraksi PTSP Helper",
   "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["*://ecourt.mahkamahagung.go.id/*"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
