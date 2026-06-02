@@ -163,6 +163,40 @@ function fillFields(fieldMap, data, filledFields, errors) {
  * Fill a text input field by matching label text.
  */
 function fillTextInput(labelPatterns, value) {
+  // Strategy 0: Direct ID lookup for eCourt's sz* naming convention
+  // eCourt uses szNama, szTempatLahir, etc.
+  const keyToFieldId = {
+    'nama': 'szNama', 'namalengkap': 'szNama',
+    'nik': 'szNIK', 'nomorindukkependudukan': 'szNIK', 'noktp': 'szNIK', 'nomoridentitas': 'szNIK',
+    'tempatlahir': 'szTempatLahir', 'tempat_lahir': 'szTempatLahir',
+    'tanggallahir': 'szTanggalLahir', 'tanggal_lahir': 'szTanggalLahir', 'tglahir': 'szTanggalLahir', 'tgl_lahir': 'szTanggalLahir',
+    'pekerjaan': 'szPekerjaan',
+    'alamat': 'szAlamat',
+    'email': 'szEmail', 'e-mail': 'szEmail',
+    'telepon': 'szTelepon', 'telp': 'szTelepon', 'notelepon': 'szTelepon',
+    'handphone': 'szHandphone', 'hp': 'szHandphone', 'nohp': 'szHandphone',
+    'warganegara': 'szKewarganegaraan', 'kewarganegaraan': 'szKewarganegaraan', 'wn': 'szKewarganegaraan',
+    'jeniskelamin': 'szJenisKelamin', 'jenis_kelamin': 'szJenisKelamin', 'jk': 'szJenisKelamin',
+    'agama': 'szAgama',
+    'pendidikan': 'szPendidikan',
+    'statuskawin': 'szStatusKawin', 'status_kawin': 'szStatusKawin', 'statusperkawinan': 'szStatusKawin',
+    'bank': 'szBank',
+    'norekening': 'szNoRekening', 'no_rekening': 'szNoRekening',
+    'akunbank': 'szAkunBank', 'akun_bank': 'szAkunBank', 'namarekening': 'szAkunBank',
+  };
+  
+  for (const pattern of labelPatterns) {
+    const normalizedKey = pattern.toLowerCase().replace(/[\s\-\/]+/g, '');
+    const fieldId = keyToFieldId[normalizedKey];
+    if (fieldId) {
+      const input = document.getElementById(fieldId);
+      if (input) {
+        setInputValue(input, value);
+        return true;
+      }
+    }
+  }
+
   // Strategy 1: Find by label text in nearby elements
   const allLabels = document.querySelectorAll('label, .label, span, div, td, th');
   
@@ -231,6 +265,30 @@ function fillTextInput(labelPatterns, value) {
  */
 function fillDropdown(labelPatterns, value) {
   const valueLower = value.toLowerCase();
+
+  // Strategy 0: Direct ID lookup for eCourt's sz* naming convention
+  const keyToFieldId = {
+    'jeniskelamin': 'szJenisKelamin', 'jenis_kelamin': 'szJenisKelamin', 'jk': 'szJenisKelamin',
+    'agama': 'szAgama',
+    'pendidikan': 'szPendidikan',
+    'statuskawin': 'szStatusKawin', 'status_kawin': 'szStatusKawin', 'statusperkawinan': 'szStatusKawin',
+    'bank': 'szBank',
+    'berkebutuhankhusus': 'szBerkebutuhanKhusus',
+    'statuspihak': 'szStatusPihak',
+    'jenispihak': 'szJenisPihak',
+    'jenisidentitas': 'szJenisIdentitas',
+  };
+
+  for (const pattern of labelPatterns) {
+    const normalizedKey = pattern.toLowerCase().replace(/[\s\-\/]+/g, '');
+    const fieldId = keyToFieldId[normalizedKey];
+    if (fieldId) {
+      const select = document.getElementById(fieldId);
+      if (select && select.tagName === 'SELECT') {
+        return setSelectValue(select, value);
+      }
+    }
+  }
 
   // Strategy 1: Find <select> elements near labels
   const allLabels = document.querySelectorAll('label, .label, span, div, td, th');
@@ -344,6 +402,7 @@ function getNearbyText(element) {
 
 /**
  * Set input value and trigger events for frameworks.
+ * Also triggers jQuery events since eCourt uses jQuery.
  */
 function setInputValue(input, value) {
   input.focus();
@@ -362,9 +421,18 @@ function setInputValue(input, value) {
     input.value = value;
   }
   
+  // Dispatch standard DOM events
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));
   input.dispatchEvent(new Event('blur', { bubbles: true }));
+  
+  // Trigger jQuery events if available (eCourt uses jQuery)
+  if (typeof jQuery !== 'undefined' || typeof $ !== 'undefined') {
+    try {
+      const jq = jQuery || $;
+      jq(input).val(value).trigger('input').trigger('change').trigger('blur');
+    } catch (e) { /* ignore jQuery errors */ }
+  }
   
   if (input.value !== value) {
     input.value = value;
