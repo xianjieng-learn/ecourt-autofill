@@ -163,32 +163,56 @@ function fillFields(fieldMap, data, filledFields, errors) {
  * Fill a text input field by matching label text.
  */
 function fillTextInput(labelPatterns, value) {
-  // Strategy 0: Direct ID lookup for eCourt's sz* naming convention
-  // eCourt uses szNama, szTempatLahir, etc.
-  const keyToFieldId = {
-    'nama': 'szNama', 'namalengkap': 'szNama',
-    'nik': 'szNIK', 'nomorindukkependudukan': 'szNIK', 'noktp': 'szNIK', 'nomoridentitas': 'szNIK',
-    'tempatlahir': 'szTempatLahir', 'tempat_lahir': 'szTempatLahir',
-    'tanggallahir': 'szTanggalLahir', 'tanggal_lahir': 'szTanggalLahir', 'tglahir': 'szTanggalLahir', 'tgl_lahir': 'szTanggalLahir',
-    'pekerjaan': 'szPekerjaan',
-    'alamat': 'szAlamat',
-    'email': 'szEmail', 'e-mail': 'szEmail',
-    'telepon': 'szTelepon', 'telp': 'szTelepon', 'notelepon': 'szTelepon',
-    'handphone': 'szHandphone', 'hp': 'szHandphone', 'nohp': 'szHandphone',
-    'warganegara': 'szKewarganegaraan', 'kewarganegaraan': 'szKewarganegaraan', 'wn': 'szKewarganegaraan',
-    'jeniskelamin': 'szJenisKelamin', 'jenis_kelamin': 'szJenisKelamin', 'jk': 'szJenisKelamin',
-    'agama': 'szAgama',
-    'pendidikan': 'szPendidikan',
-    'statuskawin': 'szStatusKawin', 'status_kawin': 'szStatusKawin', 'statusperkawinan': 'szStatusKawin',
-    'bank': 'szBank',
-    'norekening': 'szNoRekening', 'no_rekening': 'szNoRekening',
-    'akunbank': 'szAkunBank', 'akun_bank': 'szAkunBank', 'namarekening': 'szAkunBank',
+  // Strategy 0: Direct ID lookup for eCourt's naming convention
+  // Try multiple ID variations (case sensitivity varies across forms)
+  const keyToFieldIds = {
+    'nama': ['szNama'],
+    'namalengkap': ['szNama'],
+    'nik': ['szNik', 'szNIK', 'szNIK'],
+    'nomorindukkependudukan': ['szNik', 'szNIK'],
+    'noktp': ['szNik', 'szNIK'],
+    'nomoridentitas': ['szNik', 'szNIK'],
+    'tempatlahir': ['szTempatLahir'],
+    'tempat_lahir': ['szTempatLahir'],
+    'tanggallahir': ['szTanggalLahir'],
+    'tanggal_lahir': ['szTanggalLahir'],
+    'tglahir': ['szTanggalLahir'],
+    'tgl_lahir': ['szTanggalLahir'],
+    'pekerjaan': ['szPekerjaan'],
+    'alamat': ['alamat', 'szAlamat'],
+    'email': ['szEmail', 'email'],
+    'e-mail': ['szEmail'],
+    'telepon': ['szTelepon'],
+    'telp': ['szTelepon'],
+    'notelepon': ['szTelepon'],
+    'handphone': ['szHandphone'],
+    'hp': ['szHandphone'],
+    'nohp': ['szHandphone'],
+    'warganegara': ['szKewarganegaraan'],
+    'kewarganegaraan': ['szKewarganegaraan'],
+    'wn': ['szKewarganegaraan'],
+    'jeniskelamin': ['szJenisKelamin'],
+    'jenis_kelamin': ['szJenisKelamin'],
+    'jk': ['szJenisKelamin'],
+    'agama': ['szAgama'],
+    'pendidikan': ['szPendidikan'],
+    'statuskawin': ['szStatusKawin'],
+    'status_kawin': ['szStatusKawin'],
+    'statusperkawinan': ['szStatusKawin'],
+    'bank': ['szBank'],
+    'norekening': ['szNoRekening'],
+    'no_rekening': ['szNoRekening'],
+    'akunbank': ['szAkunBank'],
+    'akun_bank': ['szAkunBank'],
+    'namarekening': ['szAkunBank'],
+    'umur': ['szUmur'],
+    'usia': ['szUmur'],
   };
   
   for (const pattern of labelPatterns) {
     const normalizedKey = pattern.toLowerCase().replace(/[\s\-\/]+/g, '');
-    const fieldId = keyToFieldId[normalizedKey];
-    if (fieldId) {
+    const fieldIds = keyToFieldIds[normalizedKey] || [];
+    for (const fieldId of fieldIds) {
       const input = document.getElementById(fieldId);
       if (input) {
         setInputValue(input, value);
@@ -266,25 +290,29 @@ function fillTextInput(labelPatterns, value) {
 function fillDropdown(labelPatterns, value) {
   const valueLower = value.toLowerCase();
 
-  // Strategy 0: Direct ID lookup for eCourt's sz* naming convention
-  const keyToFieldId = {
-    'jeniskelamin': 'szJenisKelamin', 'jenis_kelamin': 'szJenisKelamin', 'jk': 'szJenisKelamin',
-    'agama': 'szAgama',
-    'pendidikan': 'szPendidikan',
-    'statuskawin': 'szStatusKawin', 'status_kawin': 'szStatusKawin', 'statusperkawinan': 'szStatusKawin',
-    'bank': 'szBank',
-    'berkebutuhankhusus': 'szBerkebutuhanKhusus',
-    'statuspihak': 'szStatusPihak',
-    'jenispihak': 'szJenisPihak',
-    'jenisidentitas': 'szJenisIdentitas',
+  // Strategy 0: Direct ID lookup for eCourt's naming convention
+  const keyToFieldIds = {
+    'jeniskelamin': ['szJenisKelamin'],
+    'jenis_kelamin': ['szJenisKelamin'],
+    'jk': ['szJenisKelamin'],
+    'agama': ['szAgama'],
+    'pendidikan': ['szPendidikan'],
+    'statuskawin': ['szStatusKawin'],
+    'status_kawin': ['szStatusKawin'],
+    'statusperkawinan': ['szStatusKawin'],
+    'bank': ['szBank'],
+    'berkebutuhankhusus': ['szBerkebutuhanKhusus'],
+    'statuspihak': ['szStatusPihak'],
+    'jenispihak': ['szJenisPihak'],
+    'jenisidentitas': ['szJenisIdentitas'],
   };
 
   for (const pattern of labelPatterns) {
     const normalizedKey = pattern.toLowerCase().replace(/[\s\-\/]+/g, '');
-    const fieldId = keyToFieldId[normalizedKey];
-    if (fieldId) {
+    const fieldIds = keyToFieldIds[normalizedKey] || [];
+    for (const fieldId of fieldIds) {
       const select = document.getElementById(fieldId);
-      if (select && select.tagName === 'SELECT') {
+      if (select && (select.tagName === 'SELECT' || select.classList.contains('select2-hidden-accessible'))) {
         return setSelectValue(select, value);
       }
     }
@@ -443,6 +471,7 @@ function setInputValue(input, value) {
 
 /**
  * Set select element value.
+ * Supports Select2 (eCourt uses Select2 for dropdowns).
  */
 function setSelectValue(select, value) {
   const valueLower = value.toLowerCase();
@@ -468,6 +497,20 @@ function setSelectValue(select, value) {
   }
 
   if (option) {
+    // Use Select2 API if available (eCourt uses Select2 for dropdowns)
+    if (typeof jQuery !== 'undefined' || typeof $ !== 'undefined') {
+      try {
+        const jq = jQuery || $;
+        const $select = jq(select);
+        // Check if Select2 is initialized on this element
+        if ($select.data('select2') || select.classList.contains('select2-hidden-accessible')) {
+          $select.val(option.value).trigger('change').trigger('select2:select');
+          return true;
+        }
+      } catch (e) { /* fall through to native */ }
+    }
+    
+    // Native select fallback
     select.value = option.value;
     select.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
