@@ -26,6 +26,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  */
 function detectFormType() {
   const bodyText = (document.body?.textContent || '').toLowerCase();
+  const visibleModalText = Array.from(document.querySelectorAll('.modal, [role="dialog"]'))
+    .filter(isVisibleContainer)
+    .map(el => el.textContent.toLowerCase())
+    .join(' ');
+
+  if (visibleModalText.includes('tambah pihak') ||
+      document.querySelector('#status_pihak, #jenis_pihak, #jenis_identitas, #telepon_pihak, #warga_negara')) {
+    return 'identity';
+  }
   
   if (bodyText.includes('tambah pengguna') || bodyText.includes('buat akun')) {
     return 'account';
@@ -50,17 +59,27 @@ function detectFormType() {
 function fillEcourtForm(data) {
   let filledFields = 0;
   const errors = [];
+  const effectiveData = {
+    jenis_pihak: 'Perorangan',
+    jenis_identitas: 'KTP',
+    kewarganegaraan: 'Indonesia',
+    ...data,
+    status_pihak: data.status_pihak || data.role,
+  };
 
   // ─── Build enhanced alamat with WA number ───
-  let alamatValue = data.alamat || '';
-  if (data.telepon && alamatValue && !alamatValue.includes(data.telepon)) {
-    alamatValue = `${alamatValue}, WA: ${data.telepon}`;
-  } else if (data.telepon && !alamatValue) {
-    alamatValue = `WA: ${data.telepon}`;
+  let alamatValue = effectiveData.alamat || '';
+  if (effectiveData.telepon && alamatValue && !alamatValue.includes(effectiveData.telepon)) {
+    alamatValue = `${alamatValue}, WA: ${effectiveData.telepon}`;
+  } else if (effectiveData.telepon && !alamatValue) {
+    alamatValue = `WA: ${effectiveData.telepon}`;
   }
 
   // ─── Field mapping: party data key → form field label pattern ───
   const fieldMap = [
+    { key: 'status_pihak',     labels: ['Status Pihak'], type: 'dropdown' },
+    { key: 'jenis_pihak',      labels: ['Jenis Pihak'], type: 'dropdown' },
+    { key: 'jenis_identitas',  labels: ['Jenis Identitas'], type: 'dropdown' },
     { key: 'nama',             labels: ['Nama', 'Nama Lengkap'], type: 'text' },
     { key: 'nik',              labels: ['Nomor Identitas', 'NIK', 'No KTP', 'Nomor Induk Kependudukan'], type: 'text' },
     { key: 'alamat',           labels: ['Alamat'], type: 'text', overrideValue: alamatValue },
@@ -76,7 +95,7 @@ function fillEcourtForm(data) {
     { key: 'status_kawin',     labels: ['Status Kawin', 'Status Perkawinan'], type: 'dropdown' },
   ];
 
-  return fillFields(fieldMap, data, filledFields, errors);
+  return fillFields(fieldMap, effectiveData, filledFields, errors);
 }
 
 /**
@@ -89,7 +108,15 @@ function fillAccountForm(data) {
 
   // ─── WA number goes to BOTH telepon and handphone ───
   const waNumber = data.telepon || data.handphone || '';
-  const effectiveData = { ...data, telepon: waNumber, handphone: waNumber };
+  const effectiveData = {
+    jenis_pihak: 'Perorangan',
+    jenis_identitas: 'KTP',
+    kewarganegaraan: 'Indonesia',
+    ...data,
+    telepon: waNumber,
+    handphone: waNumber,
+    status_pihak: data.status_pihak || data.role,
+  };
 
   // ─── Build enhanced alamat with WA number ───
   let alamatValue = effectiveData.alamat || '';
@@ -101,6 +128,9 @@ function fillAccountForm(data) {
 
   // ─── Account form field mapping ───
   const fieldMap = [
+    { key: 'status_pihak',     labels: ['Status Pihak'], type: 'dropdown' },
+    { key: 'jenis_pihak',      labels: ['Jenis Pihak'], type: 'dropdown' },
+    { key: 'jenis_identitas',  labels: ['Jenis Identitas'], type: 'dropdown' },
     // Standard fields
     { key: 'nama',             labels: ['Nama', 'Nama Lengkap'], type: 'text' },
     { key: 'nik',              labels: ['Nomor Induk Kependudukan', 'NIK', 'No KTP', 'Nomor Identitas'], type: 'text' },
@@ -171,6 +201,37 @@ function fillFields(fieldMap, data, filledFields, errors) {
   };
 }
 
+function isVisibleField(el) {
+  if (!el) return false;
+  const style = window.getComputedStyle(el);
+  const rect = el.getBoundingClientRect();
+  return style.display !== 'none' &&
+         style.visibility !== 'hidden' &&
+         style.opacity !== '0' &&
+         rect.width > 0 &&
+         rect.height > 0;
+}
+
+function isVisibleContainer(el) {
+  if (!el) return false;
+  const style = window.getComputedStyle(el);
+  const rect = el.getBoundingClientRect();
+  return style.display !== 'none' &&
+         style.visibility !== 'hidden' &&
+         rect.width > 0 &&
+         rect.height > 0;
+}
+
+function isUsableSelect(select) {
+  if (!select) return false;
+  if (isVisibleField(select)) return true;
+  if (!select.classList.contains('select2-hidden-accessible')) return false;
+
+  const select2Container = select.nextElementSibling;
+  return isVisibleContainer(select2Container) ||
+         isVisibleContainer(document.querySelector(`[aria-labelledby="select2-${select.id}-container"]`));
+}
+
 /**
  * Fill a text input field by matching label text.
  */
@@ -212,6 +273,8 @@ function fillTextInput(labelPatterns, value) {
     'statuskawin': ['szStatusKawin', 'status_kawin'],
     'status_kawin': ['szStatusKawin', 'status_kawin'],
     'statusperkawinan': ['szStatusKawin', 'status_kawin'],
+    'jenisidentitas': ['jenis_identitas'],
+    'jenis_identitas': ['jenis_identitas'],
     'bank': ['szBank'],
     'norekening': ['szNoRekening'],
     'no_rekening': ['szNoRekening'],
@@ -226,7 +289,7 @@ function fillTextInput(labelPatterns, value) {
     const normalizedKey = pattern.toLowerCase().replace(/[\s\-\/]+/g, '');
     const fieldIds = keyToFieldIds[normalizedKey] || [];
     for (const fieldId of fieldIds) {
-      const input = document.getElementById(fieldId);
+      const input = Array.from(document.querySelectorAll(`#${fieldId}`)).find(isVisibleField);
       if (input) {
         setInputValue(input, value);
         return true;
@@ -243,7 +306,7 @@ function fillTextInput(labelPatterns, value) {
     for (const pattern of labelPatterns) {
       if (labelText.includes(pattern.toLowerCase())) {
         const input = findAssociatedInput(labelEl);
-        if (input) {
+        if (input && isVisibleField(input)) {
           setInputValue(input, value);
           return true;
         }
@@ -254,6 +317,7 @@ function fillTextInput(labelPatterns, value) {
   // Strategy 2: Find inputs by placeholder or nearby text
   const inputs = document.querySelectorAll('input[type="text"], input:not([type]), textarea');
   for (const input of inputs) {
+    if (!isVisibleField(input)) continue;
     const placeholder = (input.placeholder || '').toLowerCase();
     const nearbyText = getNearbyText(input).toLowerCase();
     
@@ -288,7 +352,7 @@ function fillTextInput(labelPatterns, value) {
     const input = document.querySelector(
       `input[name*="${namePattern}" i], input[id*="${namePattern}" i]`
     );
-    if (input) {
+    if (input && isVisibleField(input)) {
       setInputValue(input, value);
       return true;
     }
@@ -301,7 +365,7 @@ function fillTextInput(labelPatterns, value) {
  * Fill a dropdown/select field by matching label text.
  */
 function fillDropdown(labelPatterns, value) {
-  const valueLower = value.toLowerCase();
+  const valueLower = normalizeOptionText(value);
 
   // Strategy 0: Direct ID lookup for eCourt's naming convention
   // Tambah Pengguna uses sz* prefix, Tambah Pihak uses plain IDs
@@ -341,7 +405,7 @@ function fillDropdown(labelPatterns, value) {
     for (const pattern of labelPatterns) {
       if (labelText.includes(pattern.toLowerCase())) {
         const select = findAssociatedSelect(labelEl);
-        if (select) {
+        if (select && isUsableSelect(select)) {
           return setSelectValue(select, value);
         }
       }
@@ -351,6 +415,7 @@ function fillDropdown(labelPatterns, value) {
   // Strategy 2: Find selects by name/id
   const selectElements = document.querySelectorAll('select');
   for (const select of selectElements) {
+    if (!isUsableSelect(select)) continue;
     const nameId = ((select.name || '') + (select.id || '')).toLowerCase();
     const nearbyText = getNearbyText(select).toLowerCase();
     
@@ -472,7 +537,19 @@ function setInputValue(input, value) {
   if (typeof jQuery !== 'undefined' || typeof $ !== 'undefined') {
     try {
       const jq = jQuery || $;
-      jq(input).val(value).trigger('input').trigger('change').trigger('blur');
+      const $input = jq(input);
+      if ($input.hasClass('hasDatepicker') || $input.hasClass('datepicker') || $input.data('datepicker')) {
+        const parts = String(value).split('/');
+        if (parts.length === 3 && typeof $input.datepicker === 'function') {
+          let [day, month, year] = parts;
+          if (year.length === 2) year = '20' + year;
+          const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+          if (!isNaN(date.getTime())) {
+            $input.datepicker('setDate', date);
+          }
+        }
+      }
+      $input.val(value).trigger('input').trigger('change').trigger('blur');
     } catch (e) { /* ignore jQuery errors */ }
   }
   
@@ -488,29 +565,39 @@ function setInputValue(input, value) {
  * Supports Select2 (eCourt uses Select2 for dropdowns).
  */
 function setSelectValue(select, value) {
-  const valueLower = value.toLowerCase();
+  const valueLower = normalizeOptionText(value);
   const options = Array.from(select.options);
+  const mappings = getDropdownMappings(select);
+  const mappedValue = mappings[valueLower] || valueLower;
   
-  let option = options.find(o => o.value.toLowerCase() === valueLower || 
-                                 o.text.toLowerCase() === valueLower);
-  
+  let option = options.find(o => normalizeOptionText(o.value) === valueLower || 
+                                 normalizeOptionText(o.text) === valueLower);
+
   if (!option) {
     option = options.find(o => 
-      o.text.toLowerCase().includes(valueLower) || 
-      valueLower.includes(o.text.toLowerCase())
+      normalizeOptionText(o.text) === mappedValue ||
+      normalizeOptionText(o.value) === mappedValue
     );
   }
 
   if (!option) {
-    const mappings = getDropdownMappings(select);
-    const mappedValue = mappings[valueLower] || valueLower;
     option = options.find(o => 
-      o.text.toLowerCase().includes(mappedValue) || 
-      o.value.toLowerCase().includes(mappedValue)
+      !isPlaceholderOption(o) &&
+      (normalizeOptionText(o.text).includes(mappedValue) ||
+       normalizeOptionText(o.value).includes(mappedValue) ||
+       mappedValue.includes(normalizeOptionText(o.text)))
     );
   }
 
   if (option) {
+    option.selected = true;
+    select.value = option.value;
+    select.selectedIndex = options.indexOf(option);
+    updateSelect2Display(select, option);
+    updateSelectInPageContext(select, option);
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
     // Use Select2 API if available (eCourt uses Select2 for dropdowns)
     if (typeof jQuery !== 'undefined' || typeof $ !== 'undefined') {
       try {
@@ -518,7 +605,16 @@ function setSelectValue(select, value) {
         const $select = jq(select);
         // Check if Select2 is initialized on this element
         if ($select.data('select2') || select.classList.contains('select2-hidden-accessible')) {
-          $select.val(option.value).trigger('change').trigger('select2:select');
+          $select
+            .val(option.value)
+            .trigger('input')
+            .trigger('change')
+            .trigger({
+              type: 'select2:select',
+              params: { data: { id: option.value, text: option.text, element: option } },
+            });
+          updateSelect2Display(select, option);
+          updateSelectInPageContext(select, option);
           return true;
         }
       } catch (e) { /* fall through to native */ }
@@ -526,11 +622,108 @@ function setSelectValue(select, value) {
     
     // Native select fallback
     select.value = option.value;
+    select.selectedIndex = options.indexOf(option);
+    updateSelect2Display(select, option);
+    updateSelectInPageContext(select, option);
     select.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
   }
 
   return false;
+}
+
+function updateSelect2Display(select, option) {
+  if (!select || !option) return;
+
+  const containers = [];
+  if (select.id) {
+    containers.push(document.getElementById(`select2-${select.id}-container`));
+    containers.push(document.querySelector(`#s2id_${select.id} .select2-chosen`));
+    containers.push(document.querySelector(`#s2id_${select.id} .select2-choice span`));
+  }
+  if (select.nextElementSibling) {
+    containers.push(select.nextElementSibling.querySelector('.select2-selection__rendered'));
+    containers.push(select.nextElementSibling.querySelector('.select2-chosen'));
+  }
+  if (select.parentElement) {
+    containers.push(select.parentElement.querySelector('.select2-selection__rendered'));
+    containers.push(select.parentElement.querySelector('.select2-chosen'));
+  }
+
+  for (const container of containers.filter(Boolean)) {
+    container.textContent = option.text;
+    container.title = option.text;
+  }
+
+  for (const opt of Array.from(select.options || [])) {
+    opt.removeAttribute('selected');
+  }
+  option.setAttribute('selected', 'selected');
+}
+
+function updateSelectInPageContext(select, option) {
+  if (!select?.id || !option) return;
+
+  const payload = JSON.stringify({
+    id: select.id,
+    value: option.value,
+    text: option.text,
+  });
+  const script = document.createElement('script');
+  script.textContent = `(() => {
+    const payload = ${payload};
+    const select = document.getElementById(payload.id);
+    if (!select) return;
+
+    select.value = payload.value;
+    const option = Array.from(select.options || []).find(opt => opt.value === payload.value);
+    if (option) {
+      Array.from(select.options || []).forEach(opt => opt.removeAttribute('selected'));
+      option.selected = true;
+      option.setAttribute('selected', 'selected');
+      select.selectedIndex = Array.from(select.options).indexOf(option);
+    }
+
+    const rendered =
+      document.getElementById('select2-' + payload.id + '-container') ||
+      document.querySelector('#s2id_' + payload.id + ' .select2-chosen') ||
+      document.querySelector('#s2id_' + payload.id + ' .select2-choice span');
+    if (rendered) {
+      rendered.textContent = payload.text;
+      rendered.title = payload.text;
+    }
+
+    if (window.jQuery) {
+      const $select = window.jQuery(select);
+      $select
+        .val(payload.value)
+        .trigger('input')
+        .trigger('change')
+        .trigger({
+          type: 'select2:select',
+          params: { data: { id: payload.value, text: payload.text, element: option || select } },
+        });
+    } else {
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  })();`;
+  document.documentElement.appendChild(script);
+  script.remove();
+}
+
+function isPlaceholderOption(option) {
+  const text = normalizeOptionText(option.text);
+  const value = normalizeOptionText(option.value);
+  return !value || value === '0' || text.startsWith('pilih ');
+}
+
+function normalizeOptionText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[|._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -541,15 +734,33 @@ function getDropdownMappings(select) {
   
   if (nameId.includes('agama')) {
     return {
-      'islam': 'islam', 'kristen': 'kristen', 'katolik': 'katolik',
-      'hindu': 'hindu', 'budha': 'budha', 'buddha': 'budha', 'konghucu': 'konghucu',
+      'islam': 'islam',
+      'kristen': 'protestan',
+      'kristen protestan': 'protestan',
+      'protestan': 'protestan',
+      'katolik': 'katolik',
+      'kristen katolik': 'katolik',
+      'hindu': 'hindu',
+      'budha': 'budha',
+      'buddha': 'budha',
+      'konghucu': 'kong hu cu',
+      'kong hu cu': 'kong hu cu',
+      'lain lain': 'lainnya',
+      'lainnya': 'lainnya',
     };
   }
   
   if (nameId.includes('kelamin') || nameId.includes('jk') || nameId.includes('gender')) {
     return {
-      'laki-laki': 'laki-laki', 'laki laki': 'laki-laki', 'laki': 'laki-laki',
-      'perempuan': 'perempuan', 'pria': 'laki-laki', 'wanita': 'perempuan',
+      'l': 'laki laki',
+      'lk': 'laki laki',
+      'laki laki': 'laki laki',
+      'laki': 'laki laki',
+      'pria': 'laki laki',
+      'p': 'perempuan',
+      'pr': 'perempuan',
+      'perempuan': 'perempuan',
+      'wanita': 'perempuan',
     };
   }
   

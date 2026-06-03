@@ -53,6 +53,9 @@ Auto-fill form identitas pihak **dan** form buat akun di eCourt dari hasil ekstr
 | Field eCourt | Sumber dari PTSP Helper |
 |---|---|
 | Nama * | nama |
+| Status Pihak * | role / status_pihak |
+| Jenis Pihak * | otomatis "Perorangan" |
+| Jenis Identitas * | otomatis "KTP" |
 | Nomor Identitas * | nik |
 | Alamat * | alamat |
 | Tempat Lahir * | tempat_lahir |
@@ -74,9 +77,6 @@ Auto-fill form identitas pihak **dan** form buat akun di eCourt dari hasil ekstr
 - Berkebutuhan Khusus
 
 **Form Identitas Pihak:**
-- Status Pihak (Penggugat/Tergugat)
-- Jenis Pihak (Perorangan/Badan Hukum)
-- Jenis Identitas (KTP)
 - Provinsi, Kabupaten, Kecamatan, Kelurahan
 
 ---

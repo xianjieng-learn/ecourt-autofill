@@ -84,21 +84,26 @@ function normalizeData(data) {
 }
 
 function normalizeParty(p) {
+  const nama = p.nama || p.name || '';
+
   return {
     role: p.role || p.status_pihak || 'penggugat',
-    nama: p.nama || p.name || '',
+    status_pihak: p.status_pihak || p.role || 'penggugat',
+    jenis_pihak: p.jenis_pihak || 'Perorangan',
+    jenis_identitas: p.jenis_identitas || 'KTP',
+    nama,
     nik: p.nik || p.nomor_identitas || '',
     alamat: p.alamat || p.address || '',
     tempat_lahir: p.tempat_lahir || p.tempatLahir || '',
     tanggal_lahir: p.tanggal_lahir || p.tanggalLahir || '',
     pekerjaan: p.pekerjaan || '',
-    agama: p.agama || '',
-    pendidikan: p.pendidikan || '',
-    kewarganegaraan: p.kewarganegaraan || 'Indonesia',
-    email: p.email || p.domisili_email || '',
-    telepon: p.telepon || p.domisili_wa || p.phone || '',
-    handphone: p.handphone || p.domisili_wa || '',
-    jenis_kelamin: p.jenis_kelamin || p.jk || '',
+    agama: p.agama || p.religion || '',
+    pendidikan: p.pendidikan || p.pendidikan_terakhir || p.tingkat_pendidikan || '',
+    kewarganegaraan: p.kewarganegaraan || p.warga_negara || p.wargaNegara || 'Indonesia',
+    email: p.email || p.email_pihak || p.domisili_email || p.domisili_elektronik || '',
+    telepon: p.telepon || p.telepon_pihak || p.nomor_telepon || p.no_telepon || p.no_telp || p.telp || p.domisili_wa || p.wa || p.no_wa || p.no_hp || p.hp || p.phone || '',
+    handphone: p.handphone || p.telepon_pihak || p.nomor_telepon || p.no_telepon || p.no_telp || p.telp || p.domisili_wa || p.wa || p.no_wa || p.no_hp || p.hp || '',
+    jenis_kelamin: p.jenis_kelamin || p.kelamin || p.gender || p.jk || inferGenderFromName(nama),
     status_kawin: p.status_kawin || '',
     // Account-specific fields (for Tambah Pengguna)
     bank: p.bank || '',
@@ -106,6 +111,13 @@ function normalizeParty(p) {
     akun_bank: p.akun_bank || '',
     _raw: p,
   };
+}
+
+function inferGenderFromName(nama) {
+  const normalized = ` ${String(nama || '').toLowerCase().replace(/\s+/g, ' ')} `;
+  if (normalized.includes(' binti ')) return 'Perempuan';
+  if (normalized.includes(' bin ')) return 'Laki-laki';
+  return '';
 }
 
 // ─── Render parties list ───
