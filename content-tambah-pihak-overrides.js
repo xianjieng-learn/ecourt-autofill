@@ -19,6 +19,19 @@ function shouldAppendPhoneForPartyAddress(data = {}) {
   return roleText.includes('tergugat') || roleText.includes('termohon');
 }
 
+function normalizeLoose(value = '') {
+  return normalizeText(value)
+    .replace(/\b(kota administrasi|kabupaten|kab|kota|provinsi|propinsi|kecamatan|kelurahan|desa)\b/g, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+}
+
+function isLooseMatch(a = '', b = '') {
+  const left = normalizeLoose(a);
+  const right = normalizeLoose(b);
+  return Boolean(left && right && (left === right || left.includes(right) || right.includes(left)));
+}
+
 function extractAddressPart(address = '', labelPatterns = []) {
   const text = String(address || '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
@@ -124,12 +137,73 @@ function findSelectForLabels(labels = []) {
   return null;
 }
 
+function findLooseOption(select, value) {
+  const options = Array.from(select?.options || []);
+  const candidates = getSelectCandidates(select, value);
+
+  for (const candidate of candidates) {
+    let option = options.find(o => isLooseMatch(o.text, candidate) || isLooseMatch(o.value, candidate));
+    if (option) return option;
+
+    option = options.find(o => isLooseMatch(`${o.text || ''} ${o.value || ''}`, candidate));
+    if (option) return option;
+  }
+
+  return null;
+}
+
+function setSelectValue(select, value) {
+  const options = Array.from(select.options || []);
+  if (!options.length) return false;
+
+  const candidates = getSelectCandidates(select, value);
+  let option = null;
+
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeText(candidate);
+    if (!normalizedCandidate) continue;
+
+    option = options.find(o => normalizeText(o.value) === normalizedCandidate || normalizeText(o.text) === normalizedCandidate);
+    if (option) break;
+
+    option = options.find(o => normalizeText(o.text).includes(normalizedCandidate) || normalizedCandidate.includes(normalizeText(o.text)));
+    if (option) break;
+
+    option = options.find(o => normalizeText(o.value).includes(normalizedCandidate));
+    if (option) break;
+  }
+
+  if (!option) option = findLooseOption(select, value);
+  if (!option) return false;
+
+  if (typeof jQuery !== 'undefined' || typeof $ !== 'undefined') {
+    try {
+      const jq = jQuery || $;
+      const $select = jq(select);
+      if ($select.data('select2') || select.classList.contains('select2-hidden-accessible')) {
+        $select.val(option.value).trigger('change').trigger('select2:select');
+        return true;
+      }
+      $select.val(option.value).trigger('change');
+    } catch (e) { /* fall through to native */ }
+  }
+
+  select.value = option.value;
+  select.dispatchEvent(new Event('input', { bubbles: true }));
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+}
+
 function isSelectFilledWith(select, value) {
   if (!select || !value) return false;
   const selected = select.options[select.selectedIndex];
-  const wanted = normalizeText(value);
-  const selectedText = normalizeText(`${selected?.text || ''} ${selected?.value || ''}`);
-  return Boolean(wanted && selectedText && (selectedText.includes(wanted) || wanted.includes(selectedText)));
+  return Boolean(
+    selected && (
+      isLooseMatch(selected.text, value) ||
+      isLooseMatch(selected.value, value) ||
+      isLooseMatch(`${selected.text || ''} ${selected.value || ''}`, value)
+    )
+  );
 }
 
 function wait(ms) {
@@ -144,17 +218,17 @@ async function fillLocationStep(label, labels, value, waitBefore = 0) {
 
   await wait(waitBefore);
 
-  for (let attempt = 1; attempt <= 4; attempt++) {
+  for (let attempt = 1; attempt <= 6; attempt++) {
     const select = findSelectForLabels(labels);
     const optionCount = select ? Array.from(select.options || []).filter(o => String(o.value || o.text || '').trim()).length : 0;
 
     if (!select || optionCount <= 1) {
-      await wait(900);
+      await wait(350);
       continue;
     }
 
     const ok = fillDropdown(labels, value);
-    await wait(900);
+    await wait(250);
 
     const verified = isSelectFilledWith(select, value) || ok;
     if (verified) {
@@ -162,7 +236,7 @@ async function fillLocationStep(label, labels, value, waitBefore = 0) {
       return true;
     }
 
-    await wait(900);
+    await wait(350);
   }
 
   addAutofillStatus(label, value, false, 'dropdown belum siap/opsi tidak cocok');
@@ -172,10 +246,10 @@ async function fillLocationStep(label, labels, value, waitBefore = 0) {
 async function scheduleLocationDropdownFill(party = {}) {
   getAutofillStatusBox();
 
-  await fillLocationStep('Provinsi', ['Provinsi'], party.provinsi, 1200);
-  await fillLocationStep('Kabupaten/Kota', ['Kabupaten', 'Kota', 'Kabupaten/Kota'], party.kabupaten, 1800);
-  await fillLocationStep('Kecamatan', ['Kecamatan'], party.kecamatan, 1800);
-  await fillLocationStep('Kelurahan/Desa', ['Kelurahan', 'Desa'], party.kelurahan, 1800);
+  await fillLocationStep('Provinsi', ['Provinsi'], party.provinsi, 450);
+  await fillLocationStep('Kabupaten/Kota', ['Kabupaten', 'Kota', 'Kabupaten/Kota'], party.kabupaten, 350);
+  await fillLocationStep('Kecamatan', ['Kecamatan'], party.kecamatan, 350);
+  await fillLocationStep('Kelurahan/Desa', ['Kelurahan', 'Desa'], party.kelurahan, 350);
 }
 
 function forceFillPhone(phone = '') {
