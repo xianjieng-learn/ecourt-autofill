@@ -1,0 +1,4 @@
+Backup pointer for content.js before Tambah Pihak update.
+Original content.js blob SHA: 49dbde37cc023d98e91fe9a78f64f529cac1fdc6
+Original main commit: 1e6c56b258af42b1342ed5b02a17a417a76d3d94
+Created on 2026-06-04.
