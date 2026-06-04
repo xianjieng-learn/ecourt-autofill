@@ -19,9 +19,81 @@ function shouldAppendPhoneForPartyAddress(data = {}) {
   return roleText.includes('tergugat') || roleText.includes('termohon');
 }
 
+function extractAddressPart(address = '', labelPatterns = []) {
+  const text = String(address || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+
+  for (const label of labelPatterns) {
+    const pattern = new RegExp(`${label}\\s+([^,;.]+)`, 'i');
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      return cleanupRegionName(match[1]);
+    }
+  }
+
+  return '';
+}
+
+function cleanupRegionName(value = '') {
+  return String(value || '')
+    .replace(/\b(kota administrasi|kabupaten|kab\.?|kota|provinsi|kecamatan|kelurahan|desa)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,\s]+|[,\s]+$/g, '')
+    .trim();
+}
+
+function normalizeProvinceName(value = '') {
+  const normalized = normalizeText(value);
+  const aliases = {
+    'daerah khusus jakarta': 'DKI Jakarta',
+    'dki jakarta': 'DKI Jakarta',
+    jakarta: 'DKI Jakarta',
+    'daerah istimewa yogyakarta': 'DI Yogyakarta',
+    yogyakarta: 'DI Yogyakarta',
+    diy: 'DI Yogyakarta',
+  };
+  return aliases[normalized] || value;
+}
+
+function enrichPartyLocations(party = {}) {
+  const alamat = party.alamat || '';
+  const extractedProvinsi = extractAddressPart(alamat, ['Provinsi', 'Propinsi']);
+  const extractedKabupaten = extractAddressPart(alamat, ['Kota Administrasi', 'Kabupaten', 'Kab\\.?', 'Kota']);
+  const extractedKecamatan = extractAddressPart(alamat, ['Kecamatan']);
+  const extractedKelurahan = extractAddressPart(alamat, ['Kelurahan', 'Desa']);
+
+  return {
+    ...party,
+    provinsi: party.provinsi || normalizeProvinceName(extractedProvinsi),
+    kabupaten: party.kabupaten || party.kota || extractedKabupaten,
+    kecamatan: party.kecamatan || extractedKecamatan,
+    kelurahan: party.kelurahan || party.desa || extractedKelurahan,
+  };
+}
+
+function scheduleLocationDropdownFill(party = {}) {
+  const steps = [
+    { value: party.provinsi, labels: ['Provinsi'], delay: 250 },
+    { value: party.kabupaten, labels: ['Kabupaten', 'Kota', 'Kabupaten/Kota'], delay: 900 },
+    { value: party.kecamatan, labels: ['Kecamatan'], delay: 1500 },
+    { value: party.kelurahan, labels: ['Kelurahan', 'Desa'], delay: 2200 },
+  ];
+
+  for (const step of steps) {
+    if (!step.value) continue;
+    setTimeout(() => {
+      try {
+        fillDropdown(step.labels, step.value);
+      } catch (e) {
+        // Keep autofill resilient when a cascading location dropdown is not ready yet.
+      }
+    }, step.delay);
+  }
+}
+
 function fillEcourtForm(data) {
   const errors = [];
-  const party = normalizePartyForEcourt(data);
+  const party = enrichPartyLocations(normalizePartyForEcourt(data));
   const shouldAppendPhoneToAddress = !isTambahPihakForm() || shouldAppendPhoneForPartyAddress(party);
   const alamatValue = buildAddressValue(party, { appendPhone: shouldAppendPhoneToAddress });
 
@@ -51,5 +123,7 @@ function fillEcourtForm(data) {
     { key: 'kelurahan',       labels: ['Kelurahan', 'Desa'], type: 'dropdown' },
   ];
 
-  return fillFields(fieldMap, party, errors);
+  const result = fillFields(fieldMap, party, errors);
+  scheduleLocationDropdownFill(party);
+  return result;
 }
