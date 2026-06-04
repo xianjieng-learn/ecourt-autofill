@@ -21,7 +21,7 @@
   "content_scripts": [
     {
       "matches": ["*://ecourt.mahkamahagung.go.id/*"],
-      "js": ["content.js"],
+      "js": ["content.js", "content-tambah-pihak-overrides.js"],
       "run_at": "document_idle"
     }
   ]
