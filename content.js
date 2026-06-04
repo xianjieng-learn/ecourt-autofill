@@ -52,13 +52,13 @@ function fillEcourtForm(data) {
   const alamatValue = buildAddressValue(party, { appendPhone: !isTambahPihakForm() });
 
   const fieldMap = [
-    // Tambah Pihak required dropdowns. Fill these early because they can show/hide dependent fields.
-    { key: 'status_pihak',    labels: ['Status Pihak'], type: 'dropdown', defaultValue: 'Penggugat' },
+    // Status Pihak is intentionally NOT defaulted because PTSP-Helper single-party JSON
+    // usually cannot know whether the party is Penggugat/Tergugat/Pemohon/Termohon.
+    { key: 'status_pihak',    labels: ['Status Pihak'], type: 'dropdown' },
     { key: 'jenis_pihak',     labels: ['Jenis Pihak'], type: 'dropdown', defaultValue: 'Perorangan' },
     { key: 'status_alamat',   labels: ['Status Alamat'], type: 'dropdown', defaultValue: party.alamat ? 'Diketahui Alamatnya' : '' },
     { key: 'jenis_identitas', labels: ['Jenis Identitas'], type: 'dropdown', defaultValue: party.nik ? 'KTP' : '' },
 
-    // Main party identity fields.
     { key: 'nama',            labels: ['Nama', 'Nama Lengkap'], type: 'text' },
     { key: 'nik',             labels: ['Nomor Identitas', 'NIK', 'No KTP', 'Nomor Induk Kependudukan'], type: 'text' },
     { key: 'alamat',          labels: ['Alamat'], type: 'text', overrideValue: alamatValue },
@@ -73,7 +73,6 @@ function fillEcourtForm(data) {
     { key: 'pendidikan',      labels: ['Pendidikan'], type: 'dropdown' },
     { key: 'agama',           labels: ['Agama'], type: 'dropdown' },
 
-    // Tambah Pihak domicile fields.
     { key: 'domisili_pihak',  labels: ['Domisili Pihak'], type: 'dropdown', defaultValue: party.alamat ? 'Dalam Negeri' : '' },
     { key: 'domisili_negara', labels: ['Negara'], type: 'dropdown' },
     { key: 'provinsi',        labels: ['Provinsi'], type: 'dropdown' },
@@ -117,15 +116,15 @@ function normalizePartyForEcourt(data = {}) {
   const raw = data._raw || {};
   const party = { ...raw, ...data };
 
-  const role = party.status_pihak || party.role || party.kedudukan || party.pihak || 'Penggugat';
+  const explicitRole = party.status_pihak || party.role || party.kedudukan || party.pihak || '';
   const nik = party.nik || party.nomor_identitas || party.nomor_induk_kependudukan || party.no_ktp || '';
   const telepon = party.telepon || party.handphone || party.domisili_wa || party.phone || '';
   const email = party.email || party.domisili_email || '';
 
   return {
     ...party,
-    role,
-    status_pihak: normalizeRoleForTambahPihak(role),
+    role: explicitRole,
+    status_pihak: explicitRole ? normalizeRoleForTambahPihak(explicitRole) : '',
     jenis_pihak: party.jenis_pihak || party.tipe_pihak || 'Perorangan',
     status_alamat: party.status_alamat || party.alamatnya || (party.alamat ? 'Diketahui Alamatnya' : ''),
     jenis_identitas: party.jenis_identitas || party.tipe_identitas || (nik ? 'KTP' : ''),
@@ -165,19 +164,16 @@ function normalizeRoleForTambahPihak(role = '') {
     pelawan: 'Pelawan',
     terlawan: 'Terlawan',
   };
-  return roleMap[value] || role || 'Penggugat';
+  return roleMap[value] || role || '';
 }
 
 function normalizeDateForEcourt(value) {
   if (!value) return '';
   const text = String(value).trim();
-
-  // Convert yyyy-mm-dd to dd/mm/yyyy. Leave dd/mm/yyyy unchanged.
   const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (iso) {
     return `${iso[3].padStart(2, '0')}/${iso[2].padStart(2, '0')}/${iso[1]}`;
   }
-
   return text;
 }
 
