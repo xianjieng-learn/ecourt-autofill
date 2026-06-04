@@ -26,9 +26,7 @@ function extractAddressPart(address = '', labelPatterns = []) {
   for (const label of labelPatterns) {
     const pattern = new RegExp(`${label}\\s+([^,;.]+)`, 'i');
     const match = text.match(pattern);
-    if (match && match[1]) {
-      return cleanupRegionName(match[1]);
-    }
+    if (match && match[1]) return cleanupRegionName(match[1]);
   }
 
   return '';
@@ -36,7 +34,7 @@ function extractAddressPart(address = '', labelPatterns = []) {
 
 function cleanupRegionName(value = '') {
   return String(value || '')
-    .replace(/\b(kota administrasi|kabupaten|kab\.?|kota|provinsi|kecamatan|kelurahan|desa)\b/gi, '')
+    .replace(/\b(kota administrasi|kabupaten|kab\.?|kota|provinsi|propinsi|kecamatan|kelurahan|desa)\b/gi, '')
     .replace(/\s+/g, ' ')
     .replace(/^[,\s]+|[,\s]+$/g, '')
     .trim();
@@ -46,6 +44,7 @@ function normalizeProvinceName(value = '') {
   const normalized = normalizeText(value);
   const aliases = {
     'daerah khusus jakarta': 'DKI Jakarta',
+    'daerah khusus ibukota jakarta': 'DKI Jakarta',
     'dki jakarta': 'DKI Jakarta',
     jakarta: 'DKI Jakarta',
     'daerah istimewa yogyakarta': 'DI Yogyakarta',
@@ -71,24 +70,136 @@ function enrichPartyLocations(party = {}) {
   };
 }
 
-function scheduleLocationDropdownFill(party = {}) {
-  const steps = [
-    { value: party.provinsi, labels: ['Provinsi'], delay: 250 },
-    { value: party.kabupaten, labels: ['Kabupaten', 'Kota', 'Kabupaten/Kota'], delay: 900 },
-    { value: party.kecamatan, labels: ['Kecamatan'], delay: 1500 },
-    { value: party.kelurahan, labels: ['Kelurahan', 'Desa'], delay: 2200 },
+function getAutofillStatusBox() {
+  let box = document.getElementById('ecourt-autofill-status-box');
+  if (box) return box;
+
+  box = document.createElement('div');
+  box.id = 'ecourt-autofill-status-box';
+  box.style.cssText = [
+    'position:fixed',
+    'right:16px',
+    'bottom:16px',
+    'z-index:999999',
+    'max-width:360px',
+    'padding:12px',
+    'border-radius:10px',
+    'background:#111827',
+    'color:#ffffff',
+    'font:12px/1.45 Arial, sans-serif',
+    'box-shadow:0 8px 24px rgba(0,0,0,.25)'
+  ].join(';');
+  box.innerHTML = '<b>eCourt AutoFill</b><div id="ecourt-autofill-status-lines" style="margin-top:6px"></div>';
+  document.body.appendChild(box);
+  return box;
+}
+
+function addAutofillStatus(label, value, ok, detail = '') {
+  const box = getAutofillStatusBox();
+  const lines = box.querySelector('#ecourt-autofill-status-lines');
+  const line = document.createElement('div');
+  line.textContent = `${ok ? '✓' : '✗'} ${label}: ${value || '-'} ${detail ? '(' + detail + ')' : ''}`;
+  line.style.color = ok ? '#bbf7d0' : '#fecaca';
+  lines.appendChild(line);
+}
+
+function findSelectForLabels(labels = []) {
+  for (const label of labels) {
+    const key = normalizeKey(label);
+    const idMap = {
+      provinsi: 'provinsi',
+      kabupaten: 'kabupaten',
+      kota: 'kabupaten',
+      kabupatenkota: 'kabupaten',
+      kecamatan: 'kecamatan',
+      kelurahan: 'kelurahan',
+      desa: 'kelurahan',
+    };
+    const fieldId = idMap[key];
+    if (fieldId) {
+      const select = getSelectById(fieldId);
+      if (select) return select;
+    }
+  }
+  return null;
+}
+
+function isSelectFilledWith(select, value) {
+  if (!select || !value) return false;
+  const selected = select.options[select.selectedIndex];
+  const wanted = normalizeText(value);
+  const selectedText = normalizeText(`${selected?.text || ''} ${selected?.value || ''}`);
+  return Boolean(wanted && selectedText && (selectedText.includes(wanted) || wanted.includes(selectedText)));
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fillLocationStep(label, labels, value, waitBefore = 0) {
+  if (!value) {
+    addAutofillStatus(label, value, false, 'data kosong');
+    return false;
+  }
+
+  await wait(waitBefore);
+
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const select = findSelectForLabels(labels);
+    const optionCount = select ? Array.from(select.options || []).filter(o => String(o.value || o.text || '').trim()).length : 0;
+
+    if (!select || optionCount <= 1) {
+      await wait(900);
+      continue;
+    }
+
+    const ok = fillDropdown(labels, value);
+    await wait(900);
+
+    const verified = isSelectFilledWith(select, value) || ok;
+    if (verified) {
+      addAutofillStatus(label, value, true, `attempt ${attempt}`);
+      return true;
+    }
+
+    await wait(900);
+  }
+
+  addAutofillStatus(label, value, false, 'dropdown belum siap/opsi tidak cocok');
+  return false;
+}
+
+async function scheduleLocationDropdownFill(party = {}) {
+  getAutofillStatusBox();
+
+  await fillLocationStep('Provinsi', ['Provinsi'], party.provinsi, 1200);
+  await fillLocationStep('Kabupaten/Kota', ['Kabupaten', 'Kota', 'Kabupaten/Kota'], party.kabupaten, 1800);
+  await fillLocationStep('Kecamatan', ['Kecamatan'], party.kecamatan, 1800);
+  await fillLocationStep('Kelurahan/Desa', ['Kelurahan', 'Desa'], party.kelurahan, 1800);
+}
+
+function forceFillPhone(phone = '') {
+  if (!phone) return false;
+  const selectors = [
+    'input#telepon_pihak',
+    'input[name="telepon_pihak"]',
+    'input#szNoTelepon',
+    'input[name="telepon"]',
+    'input[name*="telepon" i]',
+    'input[name*="phone" i]',
+    'input[id*="telepon" i]',
+    'input[id*="phone" i]'
   ];
 
-  for (const step of steps) {
-    if (!step.value) continue;
-    setTimeout(() => {
-      try {
-        fillDropdown(step.labels, step.value);
-      } catch (e) {
-        // Keep autofill resilient when a cascading location dropdown is not ready yet.
-      }
-    }, step.delay);
+  for (const selector of selectors) {
+    const input = document.querySelector(selector);
+    if (input) {
+      setInputValue(input, phone);
+      return true;
+    }
   }
+
+  return fillTextInput(['Telepon', 'Telp', 'HP', 'No HP', 'No Telp', 'Handphone'], phone);
 }
 
 function fillEcourtForm(data) {
@@ -116,14 +227,16 @@ function fillEcourtForm(data) {
     { key: 'pendidikan',      labels: ['Pendidikan'], type: 'dropdown' },
     { key: 'agama',           labels: ['Agama'], type: 'dropdown' },
     { key: 'domisili_pihak',  labels: ['Domisili Pihak'], type: 'dropdown', defaultValue: party.alamat ? 'Dalam Negeri' : '' },
-    { key: 'domisili_negara', labels: ['Negara'], type: 'dropdown' },
-    { key: 'provinsi',        labels: ['Provinsi'], type: 'dropdown' },
-    { key: 'kabupaten',       labels: ['Kabupaten', 'Kota', 'Kabupaten/Kota'], type: 'dropdown' },
-    { key: 'kecamatan',       labels: ['Kecamatan'], type: 'dropdown' },
-    { key: 'kelurahan',       labels: ['Kelurahan', 'Desa'], type: 'dropdown' },
+    { key: 'domisili_negara', labels: ['Negara'], type: 'dropdown' }
   ];
 
   const result = fillFields(fieldMap, party, errors);
+
+  if (party.telepon || party.handphone) {
+    const phoneOk = forceFillPhone(party.telepon || party.handphone);
+    addAutofillStatus('Telepon', party.telepon || party.handphone, phoneOk, phoneOk ? 'terisi' : 'field tidak ditemukan');
+  }
+
   scheduleLocationDropdownFill(party);
   return result;
 }
