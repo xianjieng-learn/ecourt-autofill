@@ -166,8 +166,15 @@ function setSelectValue(select, value) {
     option = options.find(o => normalizeText(o.value) === normalizedCandidate || normalizeText(o.text) === normalizedCandidate);
     if (option) break;
 
-    option = options.find(o => normalizeText(o.text).includes(normalizedCandidate) || normalizedCandidate.includes(normalizeText(o.text)));
-    if (option) break;
+    // includes() match — collect all matches, prefer "Kota" over "Kabupaten" when ambiguous
+    const textMatches = options.filter(o => normalizeText(o.text).includes(normalizedCandidate) || normalizedCandidate.includes(normalizeText(o.text)));
+    if (textMatches.length === 1) {
+      option = textMatches[0];
+      break;
+    } else if (textMatches.length > 1) {
+      option = textMatches.find(o => normalizeText(o.text).startsWith('kota')) || textMatches[0];
+      break;
+    }
 
     option = options.find(o => normalizeText(o.value).includes(normalizedCandidate));
     if (option) break;
