@@ -535,14 +535,28 @@ function setSelectValue(select, value) {
     const normalizedCandidate = normalizeText(candidate);
     if (!normalizedCandidate) continue;
 
+    // 1. Exact match (best)
     option = options.find(o => normalizeText(o.value) === normalizedCandidate || normalizeText(o.text) === normalizedCandidate);
     if (option) break;
 
-    option = options.find(o => normalizeText(o.text).includes(normalizedCandidate) || normalizedCandidate.includes(normalizeText(o.text)));
-    if (option) break;
+    // 2. includes() — but when ambiguous, prefer shorter text (more specific, e.g. "Kota" over "Kabupaten")
+    const textCandidates = options.filter(o => normalizeText(o.text).includes(normalizedCandidate) || normalizedCandidate.includes(normalizeText(o.text)));
+    if (textCandidates.length === 1) {
+      option = textCandidates[0];
+      break;
+    } else if (textCandidates.length > 1) {
+      option = textCandidates.sort((a, b) => normalizeText(a.text).length - normalizeText(b.text).length)[0];
+      break;
+    }
 
-    option = options.find(o => normalizeText(o.value).includes(normalizedCandidate));
-    if (option) break;
+    const valueCandidates = options.filter(o => normalizeText(o.value).includes(normalizedCandidate));
+    if (valueCandidates.length === 1) {
+      option = valueCandidates[0];
+      break;
+    } else if (valueCandidates.length > 1) {
+      option = valueCandidates.sort((a, b) => normalizeText(a.text).length - normalizeText(b.text).length)[0];
+      break;
+    }
   }
 
   if (!option) return false;
@@ -737,11 +751,17 @@ function fillCustomDropdown(dropdown, value) {
   setTimeout(() => {
     const options = document.querySelectorAll('[role="option"], .dropdown-item, .select-option, li[class*="option"]');
     const valueText = normalizeText(value);
+    const candidates = [];
     for (const option of options) {
       if (normalizeText(option.textContent).includes(valueText)) {
-        option.click();
-        break;
+        candidates.push(option);
       }
+    }
+    if (candidates.length === 1) {
+      candidates[0].click();
+    } else if (candidates.length > 1) {
+      // Prefer shorter text (more specific) — e.g. "Kota Bekasi" over "Kabupaten Bekasi"
+      candidates.sort((a, b) => normalizeText(a.textContent).length - normalizeText(b.textContent).length)[0].click();
     }
   }, 200);
 
