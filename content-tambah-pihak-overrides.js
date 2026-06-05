@@ -163,28 +163,14 @@ function setSelectValue(select, value) {
     const normalizedCandidate = normalizeText(candidate);
     if (!normalizedCandidate) continue;
 
-    // 1. Exact match (best)
     option = options.find(o => normalizeText(o.value) === normalizedCandidate || normalizeText(o.text) === normalizedCandidate);
     if (option) break;
 
-    // 2. includes() — but when ambiguous, prefer shorter text (more specific)
-    const textCandidates = options.filter(o => normalizeText(o.text).includes(normalizedCandidate) || normalizedCandidate.includes(normalizeText(o.text)));
-    if (textCandidates.length === 1) {
-      option = textCandidates[0];
-      break;
-    } else if (textCandidates.length > 1) {
-      option = textCandidates.sort((a, b) => normalizeText(a.text).length - normalizeText(b.text).length)[0];
-      break;
-    }
+    option = options.find(o => normalizeText(o.text).includes(normalizedCandidate) || normalizedCandidate.includes(normalizeText(o.text)));
+    if (option) break;
 
-    const valueCandidates = options.filter(o => normalizeText(o.value).includes(normalizedCandidate));
-    if (valueCandidates.length === 1) {
-      option = valueCandidates[0];
-      break;
-    } else if (valueCandidates.length > 1) {
-      option = valueCandidates.sort((a, b) => normalizeText(a.text).length - normalizeText(b.text).length)[0];
-      break;
-    }
+    option = options.find(o => normalizeText(o.value).includes(normalizedCandidate));
+    if (option) break;
   }
 
   if (!option) option = findLooseOption(select, value);
