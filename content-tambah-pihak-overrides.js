@@ -32,14 +32,14 @@ function isLooseMatch(a = '', b = '') {
   return Boolean(left && right && (left === right || left.includes(right) || right.includes(left)));
 }
 
-function extractAddressPart(address = '', labelPatterns = []) {
+function extractAddressPart(address = '', labelPatterns = [], cleanup = true) {
   const text = String(address || '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
 
   for (const label of labelPatterns) {
     const pattern = new RegExp(`${label}\\s+([^,;.]+)`, 'i');
     const match = text.match(pattern);
-    if (match && match[1]) return cleanupRegionName(match[1]);
+    if (match && match[1]) return cleanup ? cleanupRegionName(match[1]) : match[1].trim();
   }
 
   return '';
@@ -70,7 +70,7 @@ function normalizeProvinceName(value = '') {
 function enrichPartyLocations(party = {}) {
   const alamat = party.alamat || '';
   const extractedProvinsi = extractAddressPart(alamat, ['Provinsi', 'Propinsi']);
-  const extractedKabupaten = extractAddressPart(alamat, ['Kota Administrasi', 'Kabupaten', 'Kab\\.?', 'Kota']);
+  const extractedKabupaten = extractAddressPart(alamat, ['Kota Administrasi', 'Kabupaten', 'Kab\\.?', 'Kota'], false);
   const extractedKecamatan = extractAddressPart(alamat, ['Kecamatan']);
   const extractedKelurahan = extractAddressPart(alamat, ['Kelurahan', 'Desa']);
 
@@ -166,13 +166,10 @@ function setSelectValue(select, value) {
     option = options.find(o => normalizeText(o.value) === normalizedCandidate || normalizeText(o.text) === normalizedCandidate);
     if (option) break;
 
-    // includes() match — collect all matches, prefer "Kota" over "Kabupaten" when ambiguous
+    // includes() match — collect all matches, prefer exact/starts-with when ambiguous
     const textMatches = options.filter(o => normalizeText(o.text).includes(normalizedCandidate) || normalizedCandidate.includes(normalizeText(o.text)));
-    if (textMatches.length === 1) {
+    if (textMatches.length >= 1) {
       option = textMatches[0];
-      break;
-    } else if (textMatches.length > 1) {
-      option = textMatches.find(o => normalizeText(o.text).startsWith('kota')) || textMatches[0];
       break;
     }
 
