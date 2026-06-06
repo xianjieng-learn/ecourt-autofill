@@ -6,7 +6,7 @@ function normalizeRoleForTambahPihak(role = '') {
     intervensi: 'Intervensi',
     'turut tergugat': 'Turut Tergugat',
     turuttergugat: 'Turut Tergugat',
-    pemohon: 'Pemohon',
+    pemohon: 'Penggugat',
     termohon: 'Tergugat',
     pelawan: 'Pelawan',
     terlawan: 'Terlawan',

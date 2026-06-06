@@ -112,6 +112,16 @@ function fillAccountForm(data) {
   return fillFields(fieldMap, effectiveData, errors);
 }
 
+function inferStatusKawinFromCase(data = {}) {
+  const caseText = normalizeText(
+    data.jenis_perkara || data.klasifikasi_perkara || data.perkara || data.jenis_perkara_lain || ''
+  );
+  if (!caseText) return '';
+  if (caseText.includes('cerai gugat') || caseText.includes('cerai talak')) return 'Kawin';
+  if (caseText.includes('istbat nikah') || caseText.includes('isbat nikah')) return 'Belum Kawin';
+  return '';
+}
+
 function normalizePartyForEcourt(data = {}) {
   const raw = data._raw || {};
   const party = { ...raw, ...data };
@@ -141,7 +151,7 @@ function normalizePartyForEcourt(data = {}) {
     telepon,
     handphone: party.handphone || telepon,
     jenis_kelamin: party.jenis_kelamin || party.jk || '',
-    status_kawin: party.status_kawin || party.status_perkawinan || '',
+    status_kawin: party.status_kawin || party.status_perkawinan || inferStatusKawinFromCase(party) || '',
     domisili_pihak: party.domisili_pihak || party.domisili || (party.alamat ? 'Dalam Negeri' : ''),
     domisili_negara: party.domisili_negara || party.negara || '',
     provinsi: party.provinsi || '',
