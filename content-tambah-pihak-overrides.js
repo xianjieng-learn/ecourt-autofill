@@ -32,14 +32,17 @@ function isLooseMatch(a = '', b = '') {
   return Boolean(left && right && (left === right || left.includes(right) || right.includes(left)));
 }
 
-function extractAddressPart(address = '', labelPatterns = [], cleanup = true) {
+function extractAddressPart(address = '', labelPatterns = [], cleanup = true, includeLabel = false) {
   const text = String(address || '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
 
   for (const label of labelPatterns) {
     const pattern = new RegExp(`${label}\\s+([^,;.]+)`, 'i');
     const match = text.match(pattern);
-    if (match && match[1]) return cleanup ? cleanupRegionName(match[1]) : match[1].trim();
+    if (match && match[1]) {
+      const raw = includeLabel ? `${label} ${match[1].trim()}` : match[1].trim();
+      return cleanup ? cleanupRegionName(raw) : raw;
+    }
   }
 
   return '';
@@ -70,7 +73,7 @@ function normalizeProvinceName(value = '') {
 function enrichPartyLocations(party = {}) {
   const alamat = party.alamat || '';
   const extractedProvinsi = extractAddressPart(alamat, ['Provinsi', 'Propinsi']);
-  const extractedKabupaten = extractAddressPart(alamat, ['Kota Administrasi', 'Kabupaten', 'Kab\\.?', 'Kota'], false);
+  const extractedKabupaten = extractAddressPart(alamat, ['Kota Administrasi', 'Kabupaten', 'Kab\\.?', 'Kota'], false, true);
   const extractedKecamatan = extractAddressPart(alamat, ['Kecamatan']);
   const extractedKelurahan = extractAddressPart(alamat, ['Kelurahan', 'Desa']);
 
