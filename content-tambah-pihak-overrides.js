@@ -166,10 +166,10 @@ function setSelectValue(select, value) {
     option = options.find(o => normalizeText(o.value) === normalizedCandidate || normalizeText(o.text) === normalizedCandidate);
     if (option) break;
 
-    // includes() match — collect all matches, prefer exact/starts-with when ambiguous
+    // includes() match — collect all matches, prefer option whose text starts with candidate
     const textMatches = options.filter(o => normalizeText(o.text).includes(normalizedCandidate) || normalizedCandidate.includes(normalizeText(o.text)));
     if (textMatches.length >= 1) {
-      option = textMatches[0];
+      option = textMatches.find(o => normalizeText(o.text).startsWith(normalizedCandidate)) || textMatches[0];
       break;
     }
 
