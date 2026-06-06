@@ -176,6 +176,17 @@ function setSelectValue(select, value) {
       break;
     }
 
+    // normalized includes — strip "administrasi" before comparing (e.g. "Kota Jakarta Timur" vs "Kota Administrasi Jakarta Timur")
+    const normIncludes = options.filter(o => {
+      const optText = normalizeText(o.text).replace(/administrasi/g, '').replace(/\s+/g, ' ').trim();
+      const cand = normalizedCandidate.replace(/administrasi/g, '').replace(/\s+/g, ' ').trim();
+      return optText.includes(cand) || cand.includes(optText);
+    });
+    if (normIncludes.length >= 1) {
+      option = normIncludes.find(o => normalizeText(o.text).startsWith(normalizedCandidate)) || normIncludes[0];
+      break;
+    }
+
     option = options.find(o => normalizeText(o.value).includes(normalizedCandidate));
     if (option) break;
   }
