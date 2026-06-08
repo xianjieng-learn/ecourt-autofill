@@ -81,7 +81,23 @@ function fillEcourtForm(data) {
     { key: 'kelurahan',       labels: ['Kelurahan', 'Desa'], type: 'dropdown' },
   ];
 
-  return fillFields(fieldMap, party, errors);
+  const result = fillFields(fieldMap, party, errors);
+
+  // Fallback: if Pemohon/Termohon not in dropdown, try Penggugat/Tergugat
+  const roleFallbacks = { Pemohon: 'Penggugat', Termohon: 'Tergugat' };
+  const rawRole = party.status_pihak || '';
+  if (roleFallbacks[rawRole]) {
+    const select = document.querySelector('#status_pihak, [name="status_pihak"], select[id*="status_pihak" i]');
+    const selected = select?.options?.[select.selectedIndex];
+    const filled = selected && String(selected.text || selected.value || '').trim() &&
+      String(selected.text || selected.value || '').toLowerCase() !== 'pilih' &&
+      String(selected.text || selected.value || '').toLowerCase() !== '-- pilih --';
+    if (!filled) {
+      fillDropdown(['Status Pihak'], roleFallbacks[rawRole]);
+    }
+  }
+
+  return result;
 }
 
 function fillAccountForm(data) {
