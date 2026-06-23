@@ -32,15 +32,28 @@ function isLooseMatch(a = '', b = '') {
   return Boolean(left && right && (left === right || left.includes(right) || right.includes(left)));
 }
 
+const REGION_LABELS = 'kota\\s+administrasi|kabupaten|kab\\.?|kota|provinsi|propinsi|kecamatan|kelurahan|desa';
+
 function extractAddressPart(address = '', labelPatterns = [], cleanup = true, includeLabel = false) {
   const text = String(address || '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
 
   for (const label of labelPatterns) {
-    const pattern = new RegExp(`${label}\\s+([^,;.]+)`, 'i');
+    // Primary: stop at comma/semicolon/period OR at next region keyword boundary
+    const pattern = new RegExp(
+      `${label}\\s+((?:(?!\\b(?:${REGION_LABELS})\\b)[^,;.])+)`, 'i'
+    );
     const match = text.match(pattern);
     if (match && match[1]) {
       const raw = includeLabel ? `${label} ${match[1].trim()}` : match[1].trim();
+      return cleanup ? cleanupRegionName(raw) : raw;
+    }
+
+    // Fallback: original pattern for labels not in REGION_LABELS
+    const fallbackPattern = new RegExp(`${label}\\s+([^,;.]+)`, 'i');
+    const fallbackMatch = text.match(fallbackPattern);
+    if (fallbackMatch && fallbackMatch[1]) {
+      const raw = includeLabel ? `${label} ${fallbackMatch[1].trim()}` : fallbackMatch[1].trim();
       return cleanup ? cleanupRegionName(raw) : raw;
     }
   }
@@ -70,8 +83,15 @@ function normalizeProvinceName(value = '') {
   return aliases[normalized] || value;
 }
 
+function cleanAddressForParsing(address = '') {
+  return String(address || '')
+    .replace(/\s+(?:namun|selanjutnya|yang\s+tidak|dengan\s+jelas|baik\s+di\s+dalam|di\s+dalam\s+maupun|diluar\s+wilayah|di\s+luar\s+wilayah|berdasarkan\s+surat|sebagaimana\s+tertuang).*$/i, '')
+    .replace(/\s*\([^)]*(?:gaib|tidak\s+diketahui|alamat)\s*\)\s*$/i, '')
+    .trim();
+}
+
 function enrichPartyLocations(party = {}) {
-  const alamat = party.alamat || '';
+  const alamat = cleanAddressForParsing(party.alamat || '');
   const extractedProvinsi = extractAddressPart(alamat, ['Provinsi', 'Propinsi']);
   const extractedKabupaten = extractAddressPart(alamat, ['Kota Administrasi', 'Kabupaten', 'Kab\\.?', 'Kota'], false, true);
   const extractedKecamatan = extractAddressPart(alamat, ['Kecamatan']);
