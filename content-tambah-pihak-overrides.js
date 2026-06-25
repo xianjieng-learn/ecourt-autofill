@@ -69,6 +69,16 @@ function cleanupRegionName(value = '') {
     .trim();
 }
 
+/** Less aggressive cleanup for kelurahan names — only strip leading label prefix.
+ *  Keeps names like "Kota Baru", "Kota Agung" intact. */
+function cleanupKelurahanName(value = '') {
+  return String(value || '')
+    .replace(/^\b(kelurahan|desa)\b\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,\s]+|[,\s]+$/g, '')
+    .trim();
+}
+
 function normalizeProvinceName(value = '') {
   const normalized = normalizeText(value);
   const aliases = {
@@ -93,9 +103,25 @@ function cleanAddressForParsing(address = '') {
 function enrichPartyLocations(party = {}) {
   const alamat = cleanAddressForParsing(party.alamat || '');
   const extractedProvinsi = extractAddressPart(alamat, ['Provinsi', 'Propinsi']);
-  const extractedKabupaten = extractAddressPart(alamat, ['Kota Administrasi', 'Kabupaten', 'Kab\\.?', 'Kota'], false, true);
+
+  // 1. Extract kelurahan BETWEEN "Kelurahan"/"Desa" and "Kecamatan" boundary.
+  //    This avoids the fallback greedy regex that captures everything after "Kelurahan".
+  //    Use cleanupKelurahanName (not cleanupRegionName) to preserve names like "Kota Baru".
+  let extractedKelurahan = '';
+  const kelMatch = alamat.match(/(?:Kelurahan|Desa)\s+(.+?)\s+Kec(?:amatan)?\b/i);
+  if (kelMatch && kelMatch[1]) {
+    extractedKelurahan = cleanupKelurahanName(kelMatch[1]);
+  }
+  if (!extractedKelurahan) {
+    extractedKelurahan = extractAddressPart(alamat, ['Kelurahan', 'Desa']);
+  }
+
+  // 2. For kabupaten extraction, strip the "Kelurahan X ... Kecamatan" segment first.
+  //    This prevents "Kota" in "Kelurahan Kota Baru" from being misidentified as kabupaten.
+  const alamatForKab = alamat.replace(/(?:Kelurahan|Desa)\s+.+?\s+(?=Kec(?:amatan)?\b)/i, '');
+  const extractedKabupaten = extractAddressPart(alamatForKab, ['Kota Administrasi', 'Kabupaten', 'Kab\\.?', 'Kota'], false, true);
+
   const extractedKecamatan = extractAddressPart(alamat, ['Kecamatan']);
-  const extractedKelurahan = extractAddressPart(alamat, ['Kelurahan', 'Desa']);
 
   return {
     ...party,
