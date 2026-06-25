@@ -138,6 +138,18 @@ function inferStatusKawinFromCase(data = {}) {
   return '';
 }
 
+/** Map equivalent pendidikan values to eCourt dropdown options. */
+function normalizePendidikan(value) {
+  if (!value) return '';
+  const v = String(value).trim().toUpperCase();
+  const map = {
+    'SLTP': 'SMP',
+    'SLTA': 'SMA',
+    'SMK': 'SMA',
+  };
+  return map[v] || value;
+}
+
 function normalizePartyForEcourt(data = {}) {
   const raw = data._raw || {};
   const party = { ...raw, ...data };
@@ -161,7 +173,7 @@ function normalizePartyForEcourt(data = {}) {
     tanggal_lahir: normalizeDateForEcourt(party.tanggal_lahir || party.tanggalLahir || ''),
     pekerjaan: party.pekerjaan || '',
     agama: party.agama || '',
-    pendidikan: party.pendidikan || '',
+    pendidikan: normalizePendidikan(party.pendidikan || ''),
     kewarganegaraan: party.kewarganegaraan || party.warga_negara || 'Indonesia',
     email,
     telepon,
